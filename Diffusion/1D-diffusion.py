@@ -103,7 +103,7 @@ def stochasticTimestep(Phi_fields_old, A_stoch, fields, T_eddy, npoints, tsteps=
 
     for i in range(fields):
         Phi_new[:,i] = np.matmul(Phi_fields_old[:,i],A_stoch[i,:,:])  # check different lin Algebra methods!
-        Phi_new[:,i] += Phi_fields_old[:,i] + IEM_term[:,i]
+        Phi_new[:,i] += Phi_fields_old[:,i] + IEM_term[:,i] # hier noch die Stochastic Geschwindigkeit rein und dafür rausnehmen bei der A Matrix
 
     return Phi_new
 
