@@ -154,7 +154,6 @@ def gaussianDist(x, mu, sig):
 
 def dWiener(dt,fields):
     # compute the Wiener Term
-
     #initialize gamma vector
     gamma = np.ones(fields)
     gamma[0:int(fields/2)] = -1
@@ -173,6 +172,81 @@ def IEM(Phi_fields_old,T_eddy, Phi_mean):
         IEM[:,i] = 1/T_eddy * (Phi_fields_old[:,i] -Phi_mean[:])
 
     return IEM
+
+def comparePlots():
+    plt.figure(1)
+    plt.plot(grid,Phi_diff)
+    plt.plot(grid,Phi_mean)
+    plt.grid()
+    plt.legend(['pure Diffusion','Stochastic Fields'])
+    plt.title('Comparison')
+    #plt.show()
+    plt.figure(2)
+    plt.plot(grid,Phi_fields)
+    plt.title('Phi der 8 Felder')
+    plt.grid()
+    plt.show()
+
+
+def stratHeun(f, G, y0, tspan, dW=None):
+    """Use the Stratonovich Heun algorithm to integrate Stratonovich equation
+    dy = f(y,t)dt + G(y,t) \circ dW(t)
+
+    where y is the d-dimensional state vector, f is a vector-valued function,
+    G is an d x m matrix-valued function giving the noise coefficients and
+    dW(t) = (dW_1, dW_2, ... dW_m) is a vector of independent Wiener increments
+
+    Args:
+      f: callable(y, t) returning (d,) array
+         Vector-valued function to define the deterministic part of the system
+      G: callable(y, t) returning (d,m) array
+         Matrix-valued function to define the noise coefficients of the system
+      y0: array of shape (d,) giving the initial state vector y(t==0)
+      tspan (array): The sequence of time points for which to solve for y.
+        These must be equally spaced, e.g. np.arange(0,10,0.005)
+        tspan[0] is the intial time corresponding to the initial state y0.
+      dW: optional array of shape (len(tspan)-1, d). This is for advanced use,
+        if you want to use a specific realization of the d independent Wiener
+        processes. If not provided Wiener increments will be generated randomly
+
+    Returns:
+      y: array, with shape (len(tspan), len(y0))
+         With the initial value y0 in the first row
+
+    Raises:
+      SDEValueError
+
+    See also:
+      W. Rumelin (1982) Numerical Treatment of Stochastic Differential
+         Equations
+      R. Mannella (2002) Integration of Stochastic Differential Equations
+         on a Computer
+      K. Burrage, P. M. Burrage and T. Tian (2004) Numerical methods for strong
+         solutions of stochastic differential equations: an overview
+    """
+    (d, m, f, G, y0, tspan, dW, __) = _check_args(f, G, y0, tspan, dW, None)
+    N = len(tspan)
+    h = (tspan[N-1] - tspan[0])/(N - 1)
+    # allocate space for result
+    y = np.zeros((N, d), dtype=type(y0[0]))
+    if dW is None:
+        # pre-generate Wiener increments (for m independent Wiener processes):
+        dW = deltaW(N - 1, m, h)
+    y[0] = y0;
+    for n in range(0, N-1):
+        tn = tspan[n]
+        tnp1 = tspan[n+1]
+        yn = y[n]
+        dWn = dW[n,:]
+        fn = f(yn, tn)
+        Gn = G(yn, tn)
+        ybar = yn + fn*h + Gn.dot(dWn)
+        fnbar = f(ybar, tnp1)
+        Gnbar = G(ybar, tnp1)
+        y[n+1] = yn + 0.5*(fn + fnbar)*h + 0.5*(Gn + Gnbar).dot(dWn)
+    return y
+
+
 
 
 
