@@ -55,7 +55,6 @@ class Diffusion(object):
         self.Phi_org = np.zeros((len(x),1))
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
-
     def setDiffMatrix(self, D=params.D, Dt=params.Dt, dt=params.dt):
         '''
         This function will fill the diffusion Matrix A
@@ -93,7 +92,6 @@ class Diffusion(object):
         else:
             raise Exception('Check your boundary conditions!')
 
-
     def pureDiffusion(self):
         # 1D diffusion equation
         try:
@@ -108,7 +106,6 @@ class Diffusion(object):
             print('Set first the Diffusion Matrix!\nThis is now done for you...')
             self.setDiffMatrix()
 
-
     def advanceDiffusion(self, tsteps = params.tsteps):
         # this is the pure diffusion process in implicit formulation
         for i in range(0, tsteps):
@@ -118,7 +115,6 @@ class Diffusion(object):
                 self.pureDiffusion()
             else:
                 self.pureDiffusion()
-
 
     # These are the functions for Stochastic Fields then
     def dWiener(self):
@@ -769,6 +765,213 @@ class StochasticDiffusion_Stratonovich(object):
         for f in range(self.fields):
             self.IEM[:, f] = - (self.Phi_fields[:, f] - self.Phi) * (self.dt / T_eddy)
 
+#############################################################################
+
+class StochasticDiffusion_noIEM(object):
+    def __init__(self,params, BC='Neumann'):
+        '''
+        :param params:
+        :param BC: Either 'Dirichlet' or 'Neumann'
+        '''
+
+        #here only fixed parameters are handed over, dt, D, etc. which are adjustable will come later
+        self.npoints = params.npoints
+        self.fields = params.fields
+        self.dx = params.dx
+        self.grid = params.grid
+        self.BC = BC
+        self.D = params.D
+        self.Dt = params.Dt
+        self.dt = params.dt
+        self.IEM_on = False
+
+        self.gradPhi = np.zeros((self.npoints,self.fields))
+        self.Phi_star = np.zeros((self.npoints,self.fields))
+
+        self.Phi_fields = np.zeros((self.npoints,self.fields))
+        self.Phi_RMS = np.zeros((self.npoints, self.fields))
+
+        self.IEM = np.zeros((self.npoints, self.fields))
+
+        #initialize the Gaussian Distribution
+        self.gaussianDist(self.grid, self.grid[int(self.npoints/2)], 0.05)
+        self.Phi = self.Phi_org[:,0].copy()
+
+    def gaussianDist(self,x, mu, sig):
+        ''' Initialize the gaussian distribution '''
+        self.Phi_org = np.zeros((len(x),1))
+        self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+
+    def setDiffMatrix(self):
+        '''
+        This function will fill the diffusion Matrix A
+        '''
+        self.A = np.zeros([self.npoints, self.npoints])
+
+        east = (self.D + self.Dt) * self.dt / self.dx ** 2
+        middle = -2 * (self.D + self.Dt) * self.dt / self.dx ** 2 + 1
+        west = (self.D + self.Dt) * self.dt / self.dx ** 2
+
+
+        for i in range(1, self.npoints - 1):
+            self.A[i][i - 1] = west
+            self.A[i][i] = middle
+            self.A[i][i + 1] = east
+
+        if self.BC == 'Neumann':
+            # INLET:
+            self.A[0][0] = middle
+            self.A[0][1] = west
+
+            # OUTLET
+            self.A[-1][-1] = middle
+            self.A[-1][-2] = east
+
+        elif self.BC == 'Dirichlet':
+            # INLET:
+            self.A[0][0] = 0
+            self.A[0][1] = 0
+
+            # OUTLET
+            self.A[-1][-1] = 0
+            self.A[-1][-2] = 0
+
+        else:
+            raise Exception('Check your boundary conditions!')
+
+
+    def pureDiffusion(self):
+        # 1D diffusion equation
+        # this is equivalent to the 1st fractional step (eq. 2.11)
+        try:
+            # again do this for each field separately
+            for f in range(self.fields):
+                self.Phi_star[:,f] = np.matmul(self.A, self.Phi_fields[:,f])
+
+                if self.BC == 'Dirichlet':
+                    # update the boundary values -> so that gradient is zero at boundary!
+                    self.Phi_star[0, f] = self.Phi_fields[1, f].copy()
+                    self.Phi_star[-1, f] = self.Phi_fields[-2, f].copy()
+
+        except AttributeError:
+            print('Set first the Diffusion Matrix!\nIt has been done for you...')
+            self.setDiffMatrix()
+
+
+    def addStochastic(self):
+        # the Wiener element is between 1,..,nFields of Wiener term
+
+
+        # compute Wiener term
+        self.dWiener()
+
+        # compute the gradient of Phi_star for each field separately
+        self.getGradients()
+
+        # now compute Phi for each field
+        for f in range(self.fields):
+            self.Phi_fields[:,f] = self.Phi_star[:,f] + np.sqrt(2*self.Dt)*self.gradPhi[:,f]*self.dW[f] * 2
+
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi = self.Phi_fields.mean(axis=1)
+
+        # get the RMS of the fields
+        self.Phi_RMS = self.Phi_fields.std(axis=1)
+
+
+    def startStochasticDiffusion(self, tsteps = params.tsteps):
+        '''
+            Start from 0 to advance the stochastic diffusion process
+        '''
+
+        # choose for IEM
+        self.IEM_on = False
+
+        #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
+        self.setDiffMatrix()
+
+        for i in range(0, tsteps):
+            if i == 0:
+
+                # this is the first time step, assuming all fields are the same,
+                # so fill them:
+                self.initFields()
+
+                # updateing diffusion equation
+                # 1. part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+            else:
+
+                # **************************************
+                # overwrite all fields with current Phi
+                # **************************************
+                for f in range(self.fields):
+                    self.Phi_fields[:, f] = self.Phi
+
+                # 1 part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+
+    def continueStochasticDiffusion(self, tsteps = params.tsteps):
+        # to advance the diffusion process
+
+        if self.Phi == self.Phi_org:
+            print('Use ".startStochasticDiffusion" to start')
+        else:
+            for i in range(0, tsteps):
+                # 1. part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+
+    # These are the functions for Stochastic Fields then
+    def dWiener(self):
+        # compute the Wiener Term
+        # initialize gamma vector
+        gamma = np.ones(self.fields)
+        gamma[0:int(self.fields / 2)] = -1
+        # shuffle it
+        np.random.shuffle(gamma)
+        self.dW = gamma * np.sqrt(self.dt)
+
+    def getGradients(self):
+        # it computes the scalar gradient dPhi/dx
+
+        for f in range(self.fields):
+            # now compute the gradients with CDS, except the boundaries, they are up and downwind
+            for i in range(self.npoints):
+                # iter over 0,...,npoints - 1
+                if i == 0:
+                    self.gradPhi[0,f] = (self.Phi_star[1,f] - self.Phi_star[0,f]) / self.dx
+                elif i == self.npoints - 1:
+                    self.gradPhi[i,f] = (self.Phi_star[i,f] - self.Phi_star[i-1,f]) / self.dx
+                else:
+                    self.gradPhi[i,f] = (self.Phi_star[i+1,f] - self.Phi_star[i-1,f]) / (2 * self.dx)
+
+
+    def upDateDiffusion(self,D,Dt,dt):
+        self.D = D
+        self.Dt = Dt
+        self.dt = dt
+
+    def initFields(self):
+        # helper to initialize the fields
+        for f in range(self.fields):
+            self.Phi_fields[:, f] = self.Phi_org[:,0].copy()
+
+
+
 
 ####################################################################
 
@@ -781,21 +984,23 @@ print("Pe is: ",round(Pe,4))
 
 ESF_off = StochasticDiffusion(myParams)
 ESF_on = StochasticDiffusion(myParams)
+ESF_new = StochasticDiffusion_noIEM(myParams)
 Diff = Diffusion(myParams)
 
-tsteps = 2000
+tsteps = 1000
 
 ESF_off.startStochasticDiffusion(tsteps=tsteps,IEM_on=False)
 ESF_on.startStochasticDiffusion(tsteps=tsteps, IEM_on=True)
+ESF_new.startStochasticDiffusion(tsteps=tsteps)
 Diff.advanceDiffusion(tsteps=tsteps)
 
 
 # plot to compare the results
 plt.figure(1)
-plt.plot(Diff.Phi_org,':k')
+plt.plot(Diff.Phi_org,':m')
 plt.plot(Diff.Phi,'-k')
-plt.plot(ESF_off.Phi,'--k')
-plt.plot(ESF_on.Phi,'-.k')
+plt.plot(ESF_off.Phi,'--b')
+plt.plot(ESF_on.Phi,'-.r')
 plt.legend(['init. Distribution','pure Diffusion','ESF Diffusion w/o IEM','ESF Diffusion w. IEM'])
 plt.title('Scalar distribution after %s steps' % str(tsteps))
 plt.ylabel('Scalar concentration [-]')
@@ -809,7 +1014,7 @@ plt.show(block=False)
 plt.figure(2)
 on, =plt.plot(ESF_on.Phi_fields[:,0],'-.r', label='IEM on')
 off, = plt.plot(ESF_off.Phi_fields[:,0],'--b', label='IEM off')
-init, = plt.plot(ESF_off.Phi_org,':k', label='init. Distribution')
+init, = plt.plot(ESF_off.Phi_org,'-m', label='init. Distribution')
 plt.plot(ESF_on.Phi_fields[:,1:],'-.r')
 plt.plot(ESF_off.Phi_fields[:,1:],'--b')
 plt.legend(handles=[on,off,init])

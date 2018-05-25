@@ -28,7 +28,7 @@ noise = np.random.normal(loc=0.0,scale=1.0,size=length)*np.sqrt(dt)
 
 #define noise process
 # solve SDE
-for j in range(1,100):
+for j in range(1,20):
     # define diffusion term
     noise = np.random.normal(loc=0.0, scale=1.0, size=length) * np.sqrt(dt)
     for i in range(1,length):
