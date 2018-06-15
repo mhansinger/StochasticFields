@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from abc import ABC
 import seaborn as sns
 from mpl_toolkits.mplot3d import Axes3D
-from numba import jit, njit
+from numba import jit
 
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
@@ -20,7 +20,7 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 # this is for latex in the plot labels and titles
 plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
-plt.rc('font', size=12)
+plt.rc('font', size=15)
 
 
 class params():
@@ -185,6 +185,12 @@ class Diffusion_2D_ABC(ABC):
             else:
                 self.pureDiffusion()
 
+    def continueDiffusion(self, tsteps = params.tsteps):
+        # to advance the diffusion process
+        for i in range(0, tsteps):
+            # 1. part of fractional step
+            self.pureDiffusion()
+
     def upDateDiffusion(self,D,Dt,dt):
         self.D = D
         self.Dt = Dt
@@ -206,11 +212,11 @@ class Diffusion_2D_ABC(ABC):
 
         if org:
             # Plot the surface.
-            surf = ax.plot_surface(X, Y, self.Phi_2d_org, cmap='RdBu',
+            surf = ax.plot_surface(X, Y, self.Phi_2d_org, cmap='inferno',
                                    linewidth=0, antialiased=False)
         else:
             # Plot the surface.
-            surf = ax.plot_surface(X, Y, self.Phi_2d, cmap='RdBu',
+            surf = ax.plot_surface(X, Y, self.Phi_2d, cmap='inferno',
                                    linewidth=0, antialiased=False)
 
         # Customize the z axis.
@@ -224,7 +230,10 @@ class Diffusion_2D_ABC(ABC):
 
         cbar.set_label('Concentration')
         cbar.set_clim(0,1)
+        plt.xlabel('x')
+        plt.ylabel('y')
         plt.title('Scalar distribution')
+        plt.tight_layout()
         plt.show(block=False)
 
     def imshow_Phi(self,org=False):
@@ -234,16 +243,21 @@ class Diffusion_2D_ABC(ABC):
         self.Phi_2d = self.Phi_2d_vec.reshape(self.npoints,self.npoints)
 
         if org:
-            plt.imshow(self.Phi_2d_org, cmap='RdBu')
+            plt.imshow(self.Phi_2d_org, cmap='inferno',extent=[0,1,0,1])
 
         else:
-            plt.imshow(self.Phi_2d, cmap='RdBu')
+            plt.imshow(self.Phi_2d, cmap='inferno',extent=[0,1,0,1])
 
 
         # Plot the surface with colorbar .
         cbar = plt.colorbar(ticks=[0,0.25,0.5,0.75,1.0])
         cbar.set_label('Concentration')
         cbar.set_clim(0,1.001)
+
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('Scalar distribution')
+        plt.tight_layout()
         #cbar.set_ticklabels(ticklabels=['0', '0.25', '0.5','0.75','1.0'])
         plt.show(block=False)
 
@@ -255,7 +269,6 @@ class Diffusion_2d(Diffusion_2D_ABC):
         '''
         Is identical to abstract base class (ABC) diffusion, so nothing added... 
         '''
-
 
 ###################################################################
 class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
@@ -300,7 +313,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             print('Set first the Diffusion Matrix!\nThis is now done for you...')
             self.setDiffMatrix()
 
-    @jit
+    @jit(parallel=True)
     def addStochastic(self):
         # the Wiener element is between 1,..,nFields of Wiener term
         # this is done in an explicit manner!
@@ -320,9 +333,9 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         # finally get the average over all fields -> new Phi, though it is never used for further computation
         self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
 
-        #**************************************
+        # *************************************
         # additional step if IEM_on = True
-        # **************************************
+        # *************************************
         if self.IEM_on:
             # compute IEM terms
             self.getIEM()
@@ -373,6 +386,24 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
                 # 2. part of fractional step, add the stochastic velocity
                 self.addStochastic()
 
+    def continueStochasticDiffusion(self, tsteps=params.tsteps):
+        # to advance the diffusion process
+
+        if self.Phi_2d_vec == self.Phi_2d_org:
+            print('Use ".startStochasticDiffusion" to start')
+        else:
+            for i in range(0, tsteps):
+                # update the mean field
+                self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+                # updateing diffusion equation
+                # 1. part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+
     # These are the functions for Stochastic Fields then
     def dWiener(self):
         # compute the Wiener Term, it has to be 2 dimensional now
@@ -385,7 +416,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             np.random.shuffle(gamma[:,d])
             self.dW[:,d] = gamma[:,d] * np.sqrt(self.dt)
 
-    @jit
+    @jit(parallel=True)
     def getGradients(self):
         # it computes the scalar gradient dPhi/dx and dPhi/dy
         #this WORKS!!!
@@ -431,15 +462,15 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             # plt.imshow(y_grad)
             # plt.show(block=False)
 
-    @jit
+    @jit(parallel=True)
     def getIEM(self):
         # compute at first the Eddy turn over time: Teddy
         # -> check if sqrt is needed!!
-        T_eddy = (self.dx**2+ self.dy**2) /(2*self.Dt)
+        T_eddy = (self.dx**2 + self.dy**2) /(2*(self.Dt + self.D))
 
         # compute IEM for each field:
         for f in range(self.fields):
-            self.IEM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_2d_vec) * (self.dt / T_eddy)
+            self.IEM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_2d_vec) * (self.dt / (2*T_eddy))
 
     # plotting
     def plot_3D_STD(self,org = False):
@@ -455,11 +486,11 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
 
         if org:
             # Plot the surface.
-            surf = ax.plot_surface(X, Y, Phi_plot, cmap='RdBu',
+            surf = ax.plot_surface(X, Y, Phi_plot, cmap='inferno',
                                    linewidth=0, antialiased=False)
         else:
             # Plot the surface.
-            surf = ax.plot_surface(X, Y, Phi_plot, cmap='RdBu',
+            surf = ax.plot_surface(X, Y, Phi_plot, cmap='inferno',
                                    linewidth=0, antialiased=False)
 
         # Customize the z axis.
@@ -474,7 +505,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         cbar.set_label('STD')
         cbar.set_clim(0,1)
         plt.title('STD from the fields')
-        plt.show(block=False)
+        #plt.show(block=False)
 
     # plotting
     def plot_3D_Field(self,field = 0):
@@ -489,7 +520,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         phi_plot = self.Phi_fields_2d[:, field].reshape(self.npoints, self.npoints)
 
         # Plot the surface.
-        surf = ax.plot_surface(X, Y, phi_plot, cmap='RdBu', linewidth=0, antialiased=False)
+        surf = ax.plot_surface(X, Y, phi_plot, cmap='inferno', linewidth=0, antialiased=False)
         cset = ax.contour(X, Y, phi_plot, zdir='z',  cmap=cm.coolwarm)
         cset = ax.contour(X, Y, phi_plot, zdir='x',  cmap=cm.coolwarm)
         cset = ax.contour(X, Y, phi_plot, zdir='y',  cmap=cm.coolwarm)
@@ -505,11 +536,12 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
 
         cbar.set_label('Concentration')
         cbar.set_clim(0, 1)
-        plt.show(block=False)
+        #plt.show(block=False)
 
     # plotting of the conditional distributions
-    def plot_conditional_fields(self, x=0.5, Diffusion=None):
+    def plot_conditional_fields(self, x=0.5, Diffusion=None, legend=False):
 
+        plt.figure()
         x_cond = int(self.npoints*x)
 
         for f in range(self.fields):
@@ -522,26 +554,30 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         try:
             phi_pure_diff = Diffusion.Phi_2d_vec.reshape(self.npoints,self.npoints)[x_cond,:]
 
-            phi_diff, = plt.plot(self.grid, phi_pure_diff, 'b-', label='pure diffusion proc.', lw=1.5)
-            mean, = plt.plot(self.grid,phi_cond,'r-', label='filtered distr.',lw=2)
-            std, = plt.plot(self.grid,phi_std,'r--',label='fields std',lw=1)
+            phi_diff, = plt.plot(self.grid, phi_pure_diff, 'b-', label='pure diffusion', lw=1.5)
+            mean, = plt.plot(self.grid,phi_cond,'r-', label='filtered value',lw=2)
+            std, = plt.plot(self.grid,phi_std,'r--',label='STD fields',lw=1)
 
-            plt.legend(handles=[field,mean,phi_diff,std])
-            plt.title('Conditional distribution $p(x|y=0.5)$')
+            if legend:
+                plt.legend(handles=[field,mean,phi_diff,std],prop={'size':9})
+            plt.title('Conditional distribution $p(x|y=0.5)$: tsteps=%s nFields=%s' % (str(self.tsteps),str(self.fields)))
             plt.ylabel('Scalar concentration [-]')
             plt.xlabel('x')
 
-            plt.show(block=False)
+            #plt.show(block=False)
 
         except:
-            mean, = plt.plot(self.grid,phi_cond,'r-', label='filtered distr.',lw=2)
-            std, = plt.plot(self.grid, phi_std, 'r--', label='fields std',lw=1)
-            plt.legend(handles=[field,mean,std])
-            plt.title('Conditional distribution $p(x|y=0.5)$')
+            mean, = plt.plot(self.grid,phi_cond,'r-', label='filtered value',lw=2)
+            std, = plt.plot(self.grid, phi_std, 'r--', label='STD fields',lw=1)
+
+            if legend:
+                plt.legend(handles=[field,mean,std],prop={'size':9})
+            plt.title('Conditional distribution $p(x|y=0.5)$: tsteps=%s, nFields=%s' % (str(self.tsteps),str(self.fields)))
             plt.ylabel('Scalar concentration [-]')
             plt.xlabel('x')
 
-            plt.show(block=False)
+            #plt.show(block=False)
+
 
 
 ###################################################################
@@ -552,6 +588,45 @@ class StochasticDiffusion_2d(StochasticDiffusion_2d_ABC):
         This is the stochastic diffusion class for 2D simulation 
         inherited from StochasticDiffusion_2d
         '''
+
+###################################################################
+class StochasticDiffusion_2d_normal(StochasticDiffusion_2d_ABC):
+    def __init__(self,params,BC='Neumann'):
+        super().__init__(params,BC='Neumann')
+        '''
+        This is with normal wiener term and not dichtomic
+        '''
+
+    # This is with normal distributed gamma ~ N(0,1)
+    def dWiener(self):
+        # compute the Wiener Term, it has to be 2 dimensional now
+        # initialize gamma vector
+        gamma = np.random.normal(0,1,[self.fields,2])
+
+        for d in range(gamma.shape[1]):
+            #gamma[0:int(self.fields / 2),d] = -1
+            # shuffle it
+            np.random.shuffle(gamma[:,d])
+            self.dW[:,d] = gamma[:,d] * np.sqrt(self.dt)
+
+
+###################################################################
+class StochasticDiffusion_2d_noD(StochasticDiffusion_2d_ABC):
+    def __init__(self, params, BC='Neumann'):
+        super().__init__(params, BC='Neumann')
+        '''
+        This is with normal wiener term and not dichtomic
+        '''
+
+    @jit(parallel=True)
+    def getIEM(self):
+        # compute at first the Eddy turn over time: Teddy
+        # -> check if sqrt is needed!!
+        T_eddy = (self.dx**2+ self.dy**2) /(2*(self.Dt))
+
+        # compute IEM for each field:
+        for f in range(self.fields):
+            self.IEM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_2d_vec) * (self.dt / (2*T_eddy))
 
 ###################################################################
 class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
@@ -626,7 +701,7 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
         # this is done in an explicit manner!
 
         # compute Wiener term
-        self.dWiener()
+        self.dWienerCum(i)
 
         # compute the gradient of Phi_star for each field separately
         self.getGradients()
@@ -637,10 +712,12 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
             #amp = np.random.normal(1,1) * np.sqrt(self.dt)
 
             self.Phi_fields_2d[:, f] = \
-                self.Phi_2d_vec + 2* np.sqrt(2 * self.Dt) * np.dot(self.gradPhi[:, f, :], (self.dW[f, :]))
+                self.Phi_2d_vec + np.sqrt( 2*self.Dt) * np.dot(self.gradPhi[:, f, :], (self.dW[f, :]))
 
             #print((np.sqrt(2 * self.Dt) *np.dot(self.gradPhi[:, f, :], (self.dW[f, :]))).max())
 
+        self.getIEM()
+        #self.Phi_fields_2d = self.Phi_fields_2d + self.IEM
         # get location of peak in field 1
         #self.peak[i] = self.Phi_fields_2d[:, 1].argmax()
 
@@ -656,35 +733,30 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
         # get the RMS of the fields
         self.Phi_STD = self.Phi_fields_2d.std(axis=1)
 
-    def getIEM(self):
-        print('Print not implemented here!')
+    # def getIEM(self):
+    #     print('Print not implemented here!')
 
     @jit
     def getIEM_negative(self):
         # compute at first the Eddy turn over time: Teddy
         # -> check if sqrt is needed!!
-        T_eddy = (self.dx**2 + self.dy**2) /(2*self.Dt)
+        T_eddy = (self.dx**2 + self.dy**2) /(2*(self.Dt+self.D))
 
         # compute IEM for each field:
         for f in range(self.fields):
             self.IEM[:,f] = (self.Phi_fields_2d[:,f] - self.Phi_2d_vec) * (self.dt / T_eddy)
 
-    # # this is for continuous random variable
-    # def dWiener(self,std=1):
-    #     # compute the Wiener Term, it has to be 2 dimensional now
-    #     # initialize gamma vector
-    #     gamma = np.zeros((self.fields,2))
-    #
-    #     for d in range(gamma.shape[1]):
-    #         for n in range(self.fields):
-    #             gamma[n,d] = np.random.normal(0,std)
-    #
-    #     # normalize
-    #     gamma[:, 0] = gamma[:, 0] - gamma[:, 0].mean()
-    #     gamma[:, 1] = gamma[:, 1] - gamma[:, 1].mean()
-    #
-    #     # compute Wiener Term
-    #     self.dW = gamma * np.sqrt(self.dt)
+    # These are the functions for Stochastic Fields then
+    def dWienerCum(self,i):
+        # compute the Wiener Term, it has to be 2 dimensional now
+        # initialize gamma vector
+        gamma = np.ones((self.fields,2))
+
+        for d in range(gamma.shape[1]):
+            gamma[0:int(self.fields / 2),d] = -1
+            # shuffle it
+            np.random.shuffle(gamma[:,d])
+            self.dW[:,d] = (gamma[:,d] * np.sqrt(self.dt))
     #
     # def plotPeak(self):
     #
@@ -700,42 +772,72 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
 ##########################################
 # to run the Simulation
 
+myParams = params()
+myParams.fields = 8
 
-time_steps=100
+#myParams.Dt = 1e-15
 
-Diff = Diffusion_2d(params())
+time_steps=500
+
+Diff = Diffusion_2d(myParams)
 Diff.advanceDiffusion(time_steps)
 #Diff.plot_3D()
 #Diff.imshow_Phi()
 #Diff.plot_3D(org=True)
 #Diff.imshow_Phi(org=True)
 
-# # IEM Off
-# Stoch2 = StochasticDiffusion_2d(params())
-# Stoch2.startStochasticDiffusion(time_steps,IEM_on=False)
-# Stoch2.plot_3D()
-# Stoch2.plot_3D_STD()
-# Stoch2.plot_conditional_fields(Diffusion=Diff)
-
-# # IEM On
-# Stoch_on = StochasticDiffusion_2d(params())
+# IEM Off
+Stoch2 = StochasticDiffusion_2d(myParams)
+Stoch2.startStochasticDiffusion(time_steps,IEM_on=False)
+Stoch2.plot_3D()
+Stoch2.plot_3D_STD()
+Stoch2.plot_conditional_fields(Diffusion=Diff,legend=True)
+#
+# # # IEM On
+# Stoch_on = StochasticDiffusion_2d(myParams)
 # Stoch_on.startStochasticDiffusion(time_steps,IEM_on=True)
 # # Stoch_on.plot_3D()
 # # Stoch_on.plot_3D_STD()
-# Stoch_on.plot_conditional_fields(Diffusion=Diff)
-
-# Phi_old
-Stoch_old = StochasticDiffusion_2d_oldPhi(params())
-Stoch_old.startStochasticDiffusion(time_steps,IEM_on=False)
-#Stoch_old.plot_3D()
-#Stoch_old.plot_3D_STD()
-Stoch_old.plot_conditional_fields(Diffusion=Diff)
-#Stoch_old.plotPeak()
-
-
+# Stoch_on.plot_conditional_fields(Diffusion=Diff,legend=True)
+# # plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
+# # plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
+# plt.show()
+#
+#
 # # # IEM On
-# Stoch_test = StochasticDiffusion_2d_test(params())
-# Stoch_test.startStochasticDiffusion(time_steps,IEM_on=True)
-# Stoch_test.plot_3D()
-# Stoch_test.plot_3D_STD()
-# Stoch_test.plot_conditional_fields(Diffusion=Diff)
+# Stoch_noD = StochasticDiffusion_2d_noD(myParams)
+# Stoch_noD.startStochasticDiffusion(time_steps,IEM_on=True)
+# # Stoch_on.plot_3D()
+# # Stoch_on.plot_3D_STD()
+# Stoch_noD.plot_conditional_fields(Diffusion=Diff)
+# plt.savefig('Figures/Phi_noD_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_noD.tsteps), str(Stoch_noD.tsteps), str(Stoch_noD.Dt), str(Stoch_noD.fields)))
+# plt.savefig('Figures/Phi_noD_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_noD.tsteps), str(Stoch_noD.tsteps), str(Stoch_noD.Dt), str(Stoch_noD.fields)))
+# plt.show()
+#
+# Normal distribution
+Stoch_norm = StochasticDiffusion_2d_normal(myParams)
+Stoch_norm.startStochasticDiffusion(time_steps,IEM_on=True)
+# Stoch_on.plot_3D()
+# Stoch_on.plot_3D_STD()
+Stoch_norm.plot_conditional_fields(Diffusion=Diff)
+#plt.savefig('Figures/Phi_norm_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_norm.tsteps), str(Stoch_norm.tsteps), str(Stoch_norm.Dt), str(Stoch_norm.fields)))
+#plt.savefig('Figures/Phi_norm_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_norm.tsteps), str(Stoch_norm.tsteps), str(Stoch_norm.Dt), str(Stoch_norm.fields)))
+plt.show()
+# #
+# Diff.Dt = 1e-15
+# Diff.advanceDiffusion(400)
+#
+# Stoch_on.Dt = 1e-15
+# Stoch_on.continueStochasticDiffusion(200)
+# Stoch_on.plot_conditional_fields(Diffusion=Diff)
+# plt.show()
+#
+# Stoch_noD.Dt = 1e-15
+# Stoch_noD.continueStochasticDiffusion(200)
+# Stoch_noD.plot_conditional_fields(Diffusion=Diff)
+# plt.show()
+
+# Stoch_oldPhi = StochasticDiffusion_2d_oldPhi(myParams)
+# Stoch_oldPhi.startStochasticDiffusion(200)
+# Stoch_oldPhi.plot_conditional_fields(Diffusion=Diff)
+# plt.show()

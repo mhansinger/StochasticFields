@@ -24,20 +24,20 @@ Samples_Scalars_df = pd.DataFrame()
 # exec("%s = %d" % (x,2))
 
 for i in range(0,len(Sample_Fields)):
-	#print i
+
 	if Sample_Fields[i]!='U':
-		# read in Data
+
 		temp=np.loadtxt(Sample_Fields[i],skiprows=4)
 		# convert to pandas Table
 		temp_df=pd.DataFrame(temp)
 		temp[temp<0.0000000000001]=0.0
 		# assign the column names
 		temp_df.columns=['Time','Val_1','Val_2']
-        #temp_df=temp_df.set_index('Time')
-        if i==0:
-            Samples_Scalars_df['Time']=temp_df['Time']
+		#temp_df=temp_df.set_index('Time')
+		if i==0:
+			Samples_Scalars_df['Time']=temp_df['Time']
 
-        Samples_Scalars_df[Sample_Fields[i]] = temp_df['Val_1']
+		Samples_Scalars_df[Sample_Fields[i]] = temp_df['Val_1']
 
 Samples_Scalars_df=Samples_Scalars_df.set_index('Time')
 ###########################################################
@@ -72,7 +72,7 @@ He.set_ylabel("kg/s^2/m^2")
 
 plt.show()
 
-plt.close()
+#plt.close()
 
 
 

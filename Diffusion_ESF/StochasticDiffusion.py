@@ -813,7 +813,6 @@ class StochasticDiffusion_noIEM(object):
         middle = -2 * (self.D + self.Dt) * self.dt / self.dx ** 2 + 1
         west = (self.D + self.Dt) * self.dt / self.dx ** 2
 
-
         for i in range(1, self.npoints - 1):
             self.A[i][i - 1] = west
             self.A[i][i] = middle
