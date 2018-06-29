@@ -780,6 +780,115 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
     #     plt.imshow(empty_vec.reshape(self.npoints,self.npoints))
     #     plt.show()
 
+
+
+###################################################################
+class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
+    def __init__(self, params, BC='Neumann', d_0=1.0):
+        super().__init__(params, BC='Neumann')
+        '''
+        This is with normal wiener term and not dichtomic
+        '''
+
+        # these are needed for the langevine model
+        self.d_0=d_0
+        self.a=self.Phi_fields_2d.copy() * 1e-15
+        self.b=self.Phi_fields_2d.copy() * 1e-15
+        self.sig_m = self.Phi_fields_2d.copy() * 1e-15
+        self.sig = self.Phi_fields_2d.copy() * 1e-15
+
+    @jit(parallel=True)
+    def addStochastic(self):
+        # the Wiener element is between 1,..,nFields of Wiener term
+        # this is done in an explicit manner!
+
+        # compute Wiener term
+        self.dWiener()
+
+        # compute the gradient of Phi_star for each field separately
+        self.getGradients()
+
+        # now compute Phi for each field and loop over points
+        for f in range(self.fields):
+            for p in range(self.npoints**2):
+                self.Phi_fields_2d[p, f] = \
+                    self.Phi_fields_2d_star[p, f] + np.sqrt(2*self.Dt) * np.dot(self.gradPhi[p, f, :],self.dW[f, :])
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+        # *************************************
+        # additional step if IEM_on = True
+        # *************************************
+        if self.IEM_on:
+            # compute IEM terms
+            self.getIEM()
+            # at this stage self.Phi is already the averaged field, so use it for further computation
+            for f in range(self.fields):
+                self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.IEM[:, f]
+
+            # finally get the average over all fields -> new Phi, though it is never used for further computation
+            self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+        # get the RMS of the fields
+        self.Phi_STD = self.Phi_fields_2d.std(axis=1)
+
+    def startStochasticDiffusion(self, tsteps = params.tsteps, IEM_on = False):
+        '''
+            Start from 0 to advance the stochastic diffusion process
+        '''
+        self.tsteps = tsteps
+
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
+        # choose for IEM
+        # note used here
+        self.IEM_on = False
+
+        #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
+        self.setDiffMatrix()
+
+        for i in range(0, self.tsteps):
+
+            if i%100 == 0:
+                print(i)
+
+            if i == 0:
+
+                # this is the first time step, assuming all fields are the same,
+                # so fill them:
+                self.initFields()
+
+                # updateing diffusion equation
+                # 1. part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+            else:
+                # 1 part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+    @jit(parallel=True)
+    def get_a(self):
+        pass
+
+    @jit(parallel=True)
+    def get_b(self):
+        pass
+
+    @jit(parallel=True)
+    def getIEM(self):
+        print('not implemented here!')
+
+    @jit(parallel=True)
+    def getLangevine(self):
+        print('to do ...')
+
 ##########################################
 # to run the Simulation
 
