@@ -83,7 +83,7 @@ class Diffusion_2D_ABC(ABC):
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
 
-    def setDiffMatrix(self, D=params.D, Dt=params.Dt, dt=params.dt):
+    def setDiffMatrix(self, dt=params.dt):
         '''
         This function will fill the diffusion Matrix A
         This is a bit more tricky than in the 1D case
@@ -93,18 +93,17 @@ class Diffusion_2D_ABC(ABC):
         '''
         #1. Vector
 
-        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints*self.npoints)
 
         self.A = np.zeros([self.npoints**2, self.npoints**2])
         self.dt = dt
 
-        east = (D + Dt) * self.dt / (self.dx ** 2)
-        middle = -2 * (D + Dt) * self.dt / (self.dx ** 2) - 2 * (D + Dt) * self.dt / (self.dy ** 2) + 1
-        west = (D + Dt) * self.dt / (self.dx ** 2)
+        east = (self.D + self.Dt) * self.dt / (self.dx ** 2)
+        middle = -2 * (self.D + self.Dt) * self.dt / (self.dx ** 2) - 2 * (self.D + self.Dt) * self.dt / (self.dy ** 2) + 1
+        west = (self.D + self.Dt) * self.dt / (self.dx ** 2)
 
         # for 2d additional
-        north = (D + Dt) * self.dt / (self.dy ** 2)
-        south = (D + Dt) * self.dt / (self.dy ** 2)
+        north = (self.D + self.Dt) * self.dt / (self.dy ** 2)
+        south = (self.D + self.Dt) * self.dt / (self.dy ** 2)
 
 
         for i in range(self.npoints, self.npoints**2 - self.npoints):
@@ -177,6 +176,10 @@ class Diffusion_2D_ABC(ABC):
         # this is the pure diffusion process in implicit formulation
         self.tsteps = tsteps
 
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
+        self.setDiffMatrix()
+
         for i in range(0, self.tsteps):
             if i == 0:
                 self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints*self.npoints)
@@ -187,6 +190,9 @@ class Diffusion_2D_ABC(ABC):
 
     def continueDiffusion(self, tsteps = params.tsteps):
         # to advance the diffusion process
+        self.tsteps = tsteps
+        self.setDiffMatrix()
+
         for i in range(0, tsteps):
             # 1. part of fractional step
             self.pureDiffusion()
@@ -355,6 +361,8 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         '''
         self.tsteps = tsteps
 
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
         # choose for IEM
         self.IEM_on = IEM_on
 
@@ -389,12 +397,17 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
     def continueStochasticDiffusion(self, tsteps=params.tsteps):
         # to advance the diffusion process
 
+        self.tsteps = tsteps
+
+        #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
+        self.setDiffMatrix()
+
         if self.Phi_2d_vec == self.Phi_2d_org:
             print('Use ".startStochasticDiffusion" to start')
         else:
             for i in range(0, tsteps):
                 # update the mean field
-                self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+                #self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
 
                 # updateing diffusion equation
                 # 1. part of fractional step
@@ -402,7 +415,6 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
 
                 # 2. part of fractional step, add the stochastic velocity
                 self.addStochastic()
-
 
     # These are the functions for Stochastic Fields then
     def dWiener(self):
@@ -457,8 +469,8 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             self.gradPhi[:,f,1] = y_grad.reshape(self.npoints * self.npoints)
 
             # plot for testing and evaluation, remove...
-            #plt.imshow(self.gradPhi[:,f,0].reshape(self.npoints,self.npoints))
-            #plt.show(block=False)
+            # plt.imshow(self.gradPhi[:,f,0].reshape(self.npoints,self.npoints))
+            # plt.show(block=False)
             # plt.imshow(y_grad)
             # plt.show(block=False)
 
@@ -577,7 +589,6 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             plt.xlabel('x')
 
             #plt.show(block=False)
-
 
 
 ###################################################################
@@ -777,7 +788,7 @@ myParams.fields = 8
 
 #myParams.Dt = 1e-15
 
-time_steps=500
+time_steps=200
 
 Diff = Diffusion_2d(myParams)
 Diff.advanceDiffusion(time_steps)
@@ -786,23 +797,23 @@ Diff.advanceDiffusion(time_steps)
 #Diff.plot_3D(org=True)
 #Diff.imshow_Phi(org=True)
 
-# IEM Off
-Stoch2 = StochasticDiffusion_2d(myParams)
-Stoch2.startStochasticDiffusion(time_steps,IEM_on=False)
-Stoch2.plot_3D()
-Stoch2.plot_3D_STD()
-Stoch2.plot_conditional_fields(Diffusion=Diff,legend=True)
+# # IEM Off
+# Stoch2 = StochasticDiffusion_2d(myParams)
+# Stoch2.startStochasticDiffusion(time_steps,IEM_on=False)
+# Stoch2.plot_3D()
+# Stoch2.plot_3D_STD()
+# Stoch2.plot_conditional_fields(Diffusion=Diff,legend=True)
 #
-# # # IEM On
-# Stoch_on = StochasticDiffusion_2d(myParams)
-# Stoch_on.startStochasticDiffusion(time_steps,IEM_on=True)
-# # Stoch_on.plot_3D()
-# # Stoch_on.plot_3D_STD()
-# Stoch_on.plot_conditional_fields(Diffusion=Diff,legend=True)
-# # plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
-# # plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
-# plt.show()
-#
+ # IEM On
+Stoch_on = StochasticDiffusion_2d(myParams)
+Stoch_on.startStochasticDiffusion(time_steps,IEM_on=True)
+# Stoch_on.plot_3D()
+# Stoch_on.plot_3D_STD()
+Stoch_on.plot_conditional_fields(Diffusion=Diff,legend=True)
+# plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
+# plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
+plt.show()
+
 #
 # # # IEM On
 # Stoch_noD = StochasticDiffusion_2d_noD(myParams)
@@ -815,14 +826,15 @@ Stoch2.plot_conditional_fields(Diffusion=Diff,legend=True)
 # plt.show()
 #
 # Normal distribution
-Stoch_norm = StochasticDiffusion_2d_normal(myParams)
-Stoch_norm.startStochasticDiffusion(time_steps,IEM_on=True)
-# Stoch_on.plot_3D()
-# Stoch_on.plot_3D_STD()
-Stoch_norm.plot_conditional_fields(Diffusion=Diff)
+# Stoch_norm = StochasticDiffusion_2d_normal(myParams)
+# Stoch_norm.startStochasticDiffusion(time_steps,IEM_on=True)
+# # Stoch_on.plot_3D()
+# # Stoch_on.plot_3D_STD()
+# Stoch_norm.plot_conditional_fields(Diffusion=Diff)
 #plt.savefig('Figures/Phi_norm_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_norm.tsteps), str(Stoch_norm.tsteps), str(Stoch_norm.Dt), str(Stoch_norm.fields)))
 #plt.savefig('Figures/Phi_norm_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_norm.tsteps), str(Stoch_norm.tsteps), str(Stoch_norm.Dt), str(Stoch_norm.fields)))
-plt.show()
+
+# plt.show()
 # #
 # Diff.Dt = 1e-15
 # Diff.advanceDiffusion(400)
@@ -841,3 +853,19 @@ plt.show()
 # Stoch_oldPhi.startStochasticDiffusion(200)
 # Stoch_oldPhi.plot_conditional_fields(Diffusion=Diff)
 # plt.show()
+
+import copy
+
+Diff_org = copy.copy(Diff)
+Stoch_org = copy.copy(Stoch_on)
+
+#Diff = Diffusion_2d(myParams)
+Diff.Dt = 1e-15
+Diff.continueDiffusion(200)
+
+Stoch_on.Dt = 1e-15
+Stoch_on.continueStochasticDiffusion(200)
+
+Stoch_on.plot_conditional_fields(Diffusion=Diff,legend=True)
+
+plt.show()
