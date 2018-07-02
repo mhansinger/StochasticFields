@@ -791,11 +791,13 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
         '''
 
         # these are needed for the langevine model
-        self.d_0=d_0
-        self.a=self.Phi_fields_2d.copy() * 1e-15
-        self.b=self.Phi_fields_2d.copy() * 1e-15
-        self.sig_m = self.Phi_fields_2d.copy() * 1e-15
-        self.sig = self.Phi_fields_2d.copy() * 1e-15
+        self.d_0 = d_0
+        self.a = self.Phi_2d_vec.copy() * 1e-15
+        self.b = self.Phi_2d_vec.copy() * 1e-15
+        self.sig_m = self.Phi_2d_vec.copy() * 1e-15
+        self.sig = self.Phi_2d_vec.copy() * 1e-15
+        self.Phi_2_filter = self.Phi_2d_vec.copy() * 1e-15
+        self.Phi_filter_2 = self.Phi_2d_vec.copy() * 1e-15
 
     @jit(parallel=True)
     def addStochastic(self):
@@ -817,18 +819,14 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
         # finally get the average over all fields -> new Phi, though it is never used for further computation
         self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
 
-        # *************************************
-        # additional step if IEM_on = True
-        # *************************************
-        if self.IEM_on:
-            # compute IEM terms
-            self.getIEM()
-            # at this stage self.Phi is already the averaged field, so use it for further computation
-            for f in range(self.fields):
-                self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.IEM[:, f]
 
-            # finally get the average over all fields -> new Phi, though it is never used for further computation
-            self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+        self.getIEM()
+        # at this stage self.Phi is already the averaged field, so use it for further computation
+        for f in range(self.fields):
+            self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.IEM[:, f]
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
 
         # get the RMS of the fields
         self.Phi_STD = self.Phi_fields_2d.std(axis=1)
@@ -840,10 +838,6 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
         self.tsteps = tsteps
 
         self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
-
-        # choose for IEM
-        # note used here
-        self.IEM_on = False
 
         #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
         self.setDiffMatrix()
@@ -875,19 +869,33 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
 
     @jit(parallel=True)
     def get_a(self):
-        pass
+
+        #set this field to 0
+        self.Phi_2_filter *= 1e-15
+
+        for f in range(0,self.fields):
+            self.Phi_2_filter[:] += self.Phi_fields_2d[:,f]*self.Phi_fields_2d[:,f]
+
+        self.Phi_2_filter = 1/self.Phi_2_filter
+        self.Phi_filter_2 = self.Phi_2d_vec * self.Phi_2d_vec
+
+        self.sig_m = self.Phi_2d_vec*(1 - self.Phi_2d_vec)                              # Eq. 7 Sabelnikov
+        self.a = 1 + self.d_0 * ((self.Phi_2d_vec - self.Phi_2_filter) / self.sig_m)    # Eq. 5 Sabelnikov
 
     @jit(parallel=True)
     def get_b(self):
-        pass
 
-    @jit(parallel=True)
-    def getIEM(self):
-        print('not implemented here!')
+        self.sig = self.Phi_2_filter - self.Phi_filter_2    # Eq. 6 Sabelnikov
+        self.b = self.d_0 * self.sig / self.sig_m           # Eq. 5 Sabelnikov
 
     @jit(parallel=True)
     def getLangevine(self):
         print('to do ...')
+        
+    @jit(parallel=True)
+    def getIEM(self):
+        print('not implemented in Binomial Langevine Version!')
+
 
 ##########################################
 # to run the Simulation
