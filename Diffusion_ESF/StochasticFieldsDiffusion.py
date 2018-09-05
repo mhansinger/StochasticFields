@@ -2,7 +2,11 @@
 This is a framework to check the impact of Ito and Stratonovich integration on the 
 pure 1D-diffusive process of an inert scalar by using the stochastic differential equation.
 
-@author: M. Hansinger 
+@author: M. Hansinger
+
+#######################################
+THIS is an old version, which is incorrect!
+#######################################
 
 '''
 
@@ -171,16 +175,16 @@ def comparePlots():
 ########################
 
 
-npoints = 300
+npoints = 100
 grid = np.linspace(0, 1, npoints)
 
 dx = 1 / npoints
-D = 0.0001
+D = 0.000001
 Dt = D*2
 
 # time step
 dt = 0.0001
-tsteps = 1000
+tsteps = 100
 fields = 8
 Phi_0 = gaussianDist(grid, grid[int(npoints/2)], 0.05)
 
@@ -192,10 +196,10 @@ for i in range(fields):
     Phi_fields_new[:, i] = Phi_0
 
 Phi_fields, Phi_mean = computeStochDiffusion(Phi_fields_old=Phi_fields_old, D=D, Dt=Dt, dt=dt, fields=fields, T_eddy=50, npoints=npoints, tsteps=tsteps)
-'''
+
 def mainRun():
     print('Stochastic fields computation started ...')
-    Phi_fields, Phi_mean = computeStochDiffusion(Phi_fields_old=Phi_fields_old, D=D, Dt=Dt, dt=dt, fields=fields, T_eddy=10, npoints=npoints, tsteps=1000)
+    Phi_fields, Phi_mean = computeStochDiffusion(Phi_fields_old=Phi_fields_old, D=D, Dt=Dt, dt=dt, fields=fields, T_eddy=10, npoints=npoints, tsteps=100)
     plt.figure(1)
     #plt.plot(grid, Phi_diff)
     plt.plot(grid, Phi_mean)
@@ -211,6 +215,6 @@ def mainRun():
 
 if __name__ == '__main__':
     mainRun()
-'''
+
 
 
