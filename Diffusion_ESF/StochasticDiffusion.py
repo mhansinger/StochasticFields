@@ -994,7 +994,7 @@ class StochasticDiffusion_noIEM(object):
 myParams = params()
 
 Pe = (myParams.D+myParams.Dt)*myParams.dt / (myParams.dx**2)
-print("Pe is: ",round(Pe,4))
+print("Pe is: ", round(Pe,4))
 
 thisBC = 'Dirichlet'
 
@@ -1007,7 +1007,7 @@ ESF_new.stepFunction(ESF_new.grid)
 Diff = Diffusion(myParams,BC=thisBC)
 Diff.stepFunction(Diff.grid)
 
-tsteps = 1000
+tsteps = 10000
 
 ESF_off.startStochasticDiffusion(tsteps=tsteps,IEM_on=False)
 ESF_on.startStochasticDiffusion(tsteps=tsteps, IEM_on=True)

@@ -14,7 +14,7 @@ myParams.computeGrid()
 
 #myParams.Dt = 1e-15
 
-time_steps=5000
+time_steps=300
 
 # Diff = Diffusion_2d(myParams,BC='Neumann')
 # Diff.stepFunction(Diff.grid)
@@ -22,9 +22,9 @@ time_steps=5000
 # Diff.advanceDiffusion(time_steps)
 # Diff.imshow_Phi()
 
-Diff2 = Diffusion_2d(myParams,BC='Neumann')
+Diff2 = Diffusion_2d(myParams,BC='Dirichlet')
 #Diff2.setDictionary()
-Diff2.stepFunction(Diff2.grid)
+Diff2.manyBlockFunction(Diff2.grid,nBlocks=9)
 Diff2.imshow_Phi()
 Diff2.advanceDiffusion(time_steps)
 Diff2.imshow_Phi()

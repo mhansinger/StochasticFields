@@ -22,7 +22,6 @@ plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 plt.rc('font', size=15)
 
-
 class params():
     '''This is the parameter class where you specify all the necessary parameters'''
     # time step
@@ -53,7 +52,7 @@ params = params()
 
 ###################################################################
 class Diffusion_2D_ABC(ABC):
-    def __init__(self,params , BC='Neumann'):
+    def __init__(self,params , BC):
         super().__init__()
         '''
         :param params:
@@ -84,12 +83,10 @@ class Diffusion_2D_ABC(ABC):
 
         self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints*self.npoints)
 
-
     def gaussianDist(self,x, mu, sig):
         '''Initialize the gaussian distribution'''
         self.Phi_org = np.zeros((len(x),1))
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
-
 
     def stepFunction(self,x):
         '''Initialize a step function'''
@@ -109,6 +106,31 @@ class Diffusion_2D_ABC(ABC):
 
         for j in range(0,self.npoints):
             self.Phi_2d[j,:] = self.Phi_org[:,0]
+
+        self.Phi_2d_org = self.Phi_2d.copy()
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
+    def blockFunction(self,x):
+        '''Initialize a step function'''
+        self.Phi_org = np.zeros((len(x),1))
+
+        self.Phi_2d[:,:] = 0
+        self.Phi_2d[:-int(self.npoints/2),:-int(self.npoints/2)] = 1
+        self.Phi_2d[int(self.npoints / 2):, int(self.npoints / 2):] = 1
+
+        self.Phi_2d_org = self.Phi_2d.copy()
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
+    def manyBlockFunction(self,x,nBlocks):
+        '''Initialize a step function'''
+        self.Phi_org = np.zeros((len(x),1))
+
+        self.Phi_2d[:,:] = 0
+
+        for x in range(0,nBlocks+1,2):
+            for y in range(0,nBlocks+1,2):
+                self.Phi_2d[int(x * self.npoints / nBlocks):int((x+1) * self.npoints / nBlocks),
+                int(y * self.npoints / nBlocks):int((y+1) * self.npoints / nBlocks)] = 1
 
         self.Phi_2d_org = self.Phi_2d.copy()
         self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
@@ -215,19 +237,8 @@ class Diffusion_2D_ABC(ABC):
         # for 2d additional
         north = (self.D + self.Dt) * self.dt / (self.dy ** 2)
         south = (self.D + self.Dt) * self.dt / (self.dy ** 2)
-        #
-        # # this is for testing
-        # print('North:', north)
-        # print('South:', south)
-        # print('Middle:', middle)
-        # print('West:', west)
-        # print('East:', east)
 
         self.setDictionary()
-
-        # # set diagonal to one
-        # for i in range(0,self.npoints**2):
-        #     self.A[i][i] = 1
 
         # Fill sparse diagonal Matrix!
 
@@ -246,17 +257,29 @@ class Diffusion_2D_ABC(ABC):
                 self.A[pos_m][pos_e] = east
                 self.A[pos_m][pos_w] = west
 
-        # Now fill the boundaries with, identity mapping
-        BC_y_0_low = [self.mapGridToA[(x,0)] for x in range(self.npoints)]
-        BC_y_0_up = [self.mapGridToA[(x, self.npoints-1)]for x in range(self.npoints)]
-        BC_x_0_low = [self.mapGridToA[(0, y)] for y in range(self.npoints)]
-        BC_x_0_up = [self.mapGridToA[(self.npoints-1, y)] for y in range(self.npoints)]
+        if self.BC == 'Neumann':
+            # this is the fixed value BC
+            # Now fill the boundaries with, identity mapping
+            BC_y_0_low = [self.mapGridToA[(x, 0)] for x in range(self.npoints)]
+            BC_y_0_up = [self.mapGridToA[(x, self.npoints - 1)] for x in range(self.npoints)]
+            BC_x_0_low = [self.mapGridToA[(0, y)] for y in range(self.npoints)]
+            BC_x_0_up = [self.mapGridToA[(self.npoints - 1, y)] for y in range(self.npoints)]
 
-        self.A[BC_y_0_low,BC_y_0_low] = 0
-        self.A[BC_x_0_low, BC_x_0_low] = 0
-        self.A[BC_x_0_up, BC_x_0_up] = 0
-        self.A[BC_y_0_up, BC_y_0_up] = 1
+            self.A[BC_y_0_low, BC_y_0_low] = 0
+            self.A[BC_x_0_low, BC_x_0_low] = 0
+            self.A[BC_x_0_up, BC_x_0_up] = 0
+            self.A[BC_y_0_up, BC_y_0_up] = 0
 
+        elif self.BC == 'Dirichlet':
+            BC_y_0_low = [self.mapGridToA[(x, 0)] for x in range(self.npoints)]
+            BC_y_0_up = [self.mapGridToA[(x, self.npoints - 1)] for x in range(self.npoints)]
+            BC_x_0_low = [self.mapGridToA[(0, y)] for y in range(self.npoints)]
+            BC_x_0_up = [self.mapGridToA[(self.npoints - 1, y)] for y in range(self.npoints)]
+
+            self.A[BC_y_0_low, BC_y_0_low] = 0
+            self.A[BC_x_0_low, BC_x_0_low] = 0
+            self.A[BC_x_0_up, BC_x_0_up] = 0
+            self.A[BC_y_0_up, BC_y_0_up] = 0
 
     def setDictionary(self):
         '''j is x coordinate; i is y coordinate. A bijective mapping between Diffusion matrix entry and spatial grid entries'''
@@ -264,7 +287,6 @@ class Diffusion_2D_ABC(ABC):
         print('Setting the Dictionary')
         self.mapGridToA = {}
         self.mapAToGrid = {}
-        self.map = lambda i, j: j*(self.npoints) + i
 
         for j in range(self.npoints):
             for i in range(self.npoints):
@@ -278,10 +300,18 @@ class Diffusion_2D_ABC(ABC):
             self.Phi_2d_vec = np.matmul(self.A,self.Phi_2d_vec)
 
             if self.BC == 'Dirichlet':
-                print('Dont use Dirichlet')
                 # update the boundary values -> so that gradient is zero at boundary!
-                #self.Phi_2d_vec[0,0] = self.Phi[1,0]
-                #self.Phi_2d[-1,0] = self.Phi[-2,0]
+                # transform back into grid space
+                self.Phi_2d = self.Phi_2d_vec.reshape(self.npoints,self.npoints)
+
+                # set the values for the boundaries
+                self.Phi_2d[:,0] = self.Phi_2d[:,1]
+                self.Phi_2d[:, self.npoints-1] = self.Phi_2d[:, self.npoints-2]
+                self.Phi_2d[0,:] = self.Phi_2d[1,:]
+                self.Phi_2d[self.npoints-1,:] = self.Phi_2d[self.npoints-2,:]
+
+                # transform back into vector space
+                self.Phi_2d_vec = self.Phi_2d.reshape(self.npoints**2)
 
         except AttributeError:
             print('Set first the Diffusion Matrix!\nThis is now done for you...')
@@ -386,8 +416,8 @@ class Diffusion_2D_ABC(ABC):
 
 ###################################################################
 class Diffusion_2d(Diffusion_2D_ABC):
-    def __init__(self,params,BC='Neumann'):
-        super().__init__(params,BC='Neumann')
+    def __init__(self,params, BC):
+        super().__init__(params,BC)
         '''
         Is identical to abstract base class (ABC) diffusion, so nothing added... 
         '''
@@ -426,10 +456,18 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
                 self.Phi_fields_2d_star[:,f] = np.matmul(self.A,self.Phi_fields_2d[:,f])
 
                 if self.BC == 'Dirichlet':
-                    print('Dont use Dirichlet')
                     # update the boundary values -> so that gradient is zero at boundary!
-                    # self.Phi_2d_vec[0,0] = self.Phi[1,0]
-                    # self.Phi_2d[-1,0] = self.Phi[-2,0]
+                    # transform back into grid space
+                    self.Phi_2d = self.Phi_2d_vec.reshape(self.npoints, self.npoints)
+
+                    # set the values for the boundaries
+                    self.Phi_2d[:, 0] = self.Phi_2d[:, 1]
+                    self.Phi_2d[:, self.npoints - 1] = self.Phi_2d[:, self.npoints - 2]
+                    self.Phi_2d[0, :] = self.Phi_2d[1, :]
+                    self.Phi_2d[self.npoints - 1, :] = self.Phi_2d[self.npoints - 2, :]
+
+                    # transform back into vector space
+                    self.Phi_2d_vec = self.Phi_2d.reshape(self.npoints ** 2)
 
         except AttributeError:
             print('Set first the Diffusion Matrix!\nThis is now done for you...')
@@ -813,10 +851,18 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
         try:
             self.Phi_2d_vec = np.matmul(self.A,self.Phi_2d_vec)
             if self.BC == 'Dirichlet':
-                print('Dont use Dirichlet')
                 # update the boundary values -> so that gradient is zero at boundary!
-                # self.Phi_2d_vec[0,0] = self.Phi[1,0]
-                # self.Phi_2d[-1,0] = self.Phi[-2,0]
+                # transform back into grid space
+                self.Phi_2d = self.Phi_2d_vec.reshape(self.npoints,self.npoints)
+
+                # set the values for the boundaries
+                self.Phi_2d[:,0] = self.Phi_2d[:,1]
+                self.Phi_2d[:, self.npoints-1] = self.Phi_2d[:, self.npoints-2]
+                self.Phi_2d[0,:] = self.Phi_2d[1,:]
+                self.Phi_2d[self.npoints-1,:] = self.Phi_2d[self.npoints-2,:]
+
+                # transform back into vector space
+                self.Phi_2d_vec = self.Phi_2d.reshape(self.npoints**2)
 
         except AttributeError:
             print('Set first the Diffusion Matrix!\nThis is now done for you...')
