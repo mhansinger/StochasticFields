@@ -25,7 +25,7 @@ print('Now computing Stochastic Diffusion with Langevine model')
 Langev = StochasticDiffusion_2d_Langevine(myParams,d_0=1)
 #Langev = StochasticDiffusion_2d(myParams)
 
-p1 = Process(target=Langev.startStochasticDiffusion(time_steps,IEM_on=True))
+p1 = Process(target=Langev.startStochasticDiffusion(time_steps,IEM_on=False))
 
 
 # Langev.startStochasticDiffusion(time_steps)
@@ -39,7 +39,7 @@ p1 = Process(target=Langev.startStochasticDiffusion(time_steps,IEM_on=True))
 Stoch_on = StochasticDiffusion_2d(myParams)
 # Stoch_on.startStochasticDiffusion(time_steps,IEM_on=True)
 
-p2 = Process(target = Stoch_on.startStochasticDiffusion(time_steps,IEM_on=True))
+p2 = Process(target = Stoch_on.startStochasticDiffusion(time_steps,IEM_on=False))
 
 p1.start()
 p2.start()

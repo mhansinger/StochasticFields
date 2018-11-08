@@ -22,6 +22,7 @@ plt.rc('text', usetex=True)
 plt.rc('font', family='serif')
 plt.rc('font', size=15)
 
+
 class params():
     '''This is the parameter class where you specify all the necessary parameters'''
     # time step
@@ -41,7 +42,7 @@ class params():
         # number of stochastic fields
         self.fields = 8
         # time steps to compute
-        self.tsteps = 200
+        self.tsteps = 500
 
     def computeGrid(self):
         self.grid = np.linspace(0, 1, self.npoints)
@@ -424,8 +425,8 @@ class Diffusion_2d(Diffusion_2D_ABC):
 
 ###################################################################
 class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
-    def __init__(self,params,BC='Neumann'):
-        super().__init__(params,BC='Neumann')
+    def __init__(self,params,BC):
+        super().__init__(params,BC)
         '''
         This is the stochastic diffusion base class for 2D simulation 
         '''
@@ -443,10 +444,26 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         # needed for operator splitting
         self.Phi_fields_2d_star = self.Phi_fields_2d.copy()
 
+        np.random.seed(seed=5)
+        # create two shuffled matrices (2 dimensions)
+        self.AA1 = self.create_AA()
+        self.AA2 = self.create_AA()
+        self.t_count = 0
+
     def initFields(self):
         # helper to initialize the fields
         for f in range(self.fields):
             self.Phi_fields_2d[:, f] = self.Phi_2d_vec.copy()
+
+    def create_AA(self):
+        # pre defined random vector
+        AA = np.ones((self.tsteps,self.fields))
+        AA[:,0:int(self.fields/2)] = -1
+
+        # now shuffle this array between the 0s and 1s
+        for t in range(self.tsteps):
+            np.random.shuffle(AA[t,:])
+        return AA
 
     # has to overwritten as the function needs to do matrix multiplication for each field separately!
     def pureDiffusion(self):
@@ -458,16 +475,17 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
                 if self.BC == 'Dirichlet':
                     # update the boundary values -> so that gradient is zero at boundary!
                     # transform back into grid space
-                    self.Phi_2d = self.Phi_2d_vec.reshape(self.npoints, self.npoints)
+                    # transform back into 2D space
+                    this_Phi_field_array = self.Phi_fields_2d_star[:, f].reshape(self.npoints, self.npoints)
 
                     # set the values for the boundaries
-                    self.Phi_2d[:, 0] = self.Phi_2d[:, 1]
-                    self.Phi_2d[:, self.npoints - 1] = self.Phi_2d[:, self.npoints - 2]
-                    self.Phi_2d[0, :] = self.Phi_2d[1, :]
-                    self.Phi_2d[self.npoints - 1, :] = self.Phi_2d[self.npoints - 2, :]
+                    this_Phi_field_array[:, 0] = this_Phi_field_array[:, 1]
+                    this_Phi_field_array[:, self.npoints - 1] = this_Phi_field_array[:, self.npoints - 2]
+                    this_Phi_field_array[0, :] = this_Phi_field_array[1, :]
+                    this_Phi_field_array[self.npoints - 1, :] = this_Phi_field_array[self.npoints - 2, :]
 
                     # transform back into vector space
-                    self.Phi_2d_vec = self.Phi_2d.reshape(self.npoints ** 2)
+                    self.Phi_fields_2d_star[:, f] = this_Phi_field_array.reshape(self.npoints ** 2)
 
         except AttributeError:
             print('Set first the Diffusion Matrix!\nThis is now done for you...')
@@ -479,7 +497,10 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         # this is done in an explicit manner!
 
         # compute Wiener term
-        self.dWiener()
+        #self.dWiener()
+
+        # this is using a Wiener term with seed for reproduction of results
+        self.dWiener2()
 
         # compute the gradient of Phi_star for each field separately
         self.getGradients()
@@ -582,6 +603,13 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             np.random.shuffle(gamma[:,d])
             self.dW[:,d] = gamma[:,d] * np.sqrt(self.dt)
 
+    def dWiener2(self):
+        # computes the Wiener term based on self.AA
+
+        self.t_count += 1
+        self.dW[:, 0] = self.AA1[self.t_count - 1, :] * np.sqrt(self.dt)    # x-component
+        self.dW[:, 1] = self.AA2[self.t_count - 1, :] * np.sqrt(self.dt)    # y-component
+
     @jit(parallel=True)
     def getGradients(self):
         # it computes the scalar gradient dPhi/dx and dPhi/dy
@@ -638,6 +666,8 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         for f in range(self.fields):
             self.IEM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_2d_vec) * (self.dt / (2*T_eddy))
 
+        print('Max IEM: ', max(self.IEM[:,1]))
+
     # plotting
     def plot_3D_STD(self,org = False):
 
@@ -671,7 +701,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
         cbar.set_label('STD')
         cbar.set_clim(0,1)
         plt.title('STD from the fields')
-        #plt.show(block=False)
+        plt.show(block=False)
 
     # plotting
     def plot_3D_Field(self,field = 0):
@@ -702,7 +732,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
 
         cbar.set_label('Concentration')
         cbar.set_clim(0, 1)
-        #plt.show(block=False)
+        plt.show(block=False)
 
     # plotting of the conditional distributions
     def plot_conditional_fields(self, x=0.5, Diffusion=None, legend=False):
@@ -715,14 +745,14 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             field, = plt.plot(self.grid, phi_field_cond, 'k--', label='stochastic field', lw=0.7, alpha=0.75)
 
         phi_cond = self.Phi_2d_vec.reshape(self.npoints, self.npoints)[x_cond, :]
-        phi_std = self.Phi_fields_2d.std(axis=1).reshape(self.npoints,self.npoints)[x_cond,:]
+        self.Phi_std = self.Phi_fields_2d.std(axis=1).reshape(self.npoints,self.npoints)[x_cond,:]
 
         try:
             phi_pure_diff = Diffusion.Phi_2d_vec.reshape(self.npoints,self.npoints)[x_cond,:]
 
             phi_diff, = plt.plot(self.grid, phi_pure_diff, 'b-', label='pure diffusion', lw=1.5)
             mean, = plt.plot(self.grid,phi_cond,'r-', label='filtered value',lw=2)
-            std, = plt.plot(self.grid,phi_std,'r--',label='STD fields',lw=1)
+            std, = plt.plot(self.grid,self.Phi_std,'r--',label='STD fields',lw=1)
 
             if legend:
                 plt.legend(handles=[field,mean,phi_diff,std],prop={'size':9})
@@ -734,7 +764,7 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
 
         except:
             mean, = plt.plot(self.grid,phi_cond,'r-', label='filtered value',lw=2)
-            std, = plt.plot(self.grid, phi_std, 'r--', label='STD fields',lw=1)
+            std, = plt.plot(self.grid, self.Phi_std, 'r--', label='STD fields',lw=1)
 
             if legend:
                 plt.legend(handles=[field,mean,std],prop={'size':9})
@@ -742,13 +772,41 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
             plt.ylabel('Scalar concentration [-]')
             plt.xlabel('x')
 
-            #plt.show(block=False)
+            plt.show(block=False)
 
+
+    def plot_conditional_error(self, x=0.5, Diffusion=None):
+
+        plt.figure()
+        plt.title('Conditional error $p(x|y=0.5)$: tsteps=%s, nFields=%s' % (str(self.tsteps), str(self.fields)))
+
+        x_cond = int(self.npoints*x)
+
+        Phi_error_vec = self.Phi_2d_vec - Diffusion.Phi_2d_vec
+        self.Phi_error = Phi_error_vec.reshape(self.npoints, self.npoints)
+
+        plt.plot(self.Phi_error[x_cond, :],'r-',lw=2)
+        plt.legend(['Error'])
+        plt.show(block=False)
+
+    def imshow_error(self, x=0.5, Diffusion=None):
+
+        plt.figure()
+        plt.title('Error map: tsteps=%s, nFields=%s' % (str(self.tsteps), str(self.fields)))
+
+        x_cond = int(self.npoints*x)
+
+        Phi_error_vec = self.Phi_2d_vec - Diffusion.Phi_2d_vec
+        self.Phi_error = Phi_error_vec.reshape(self.npoints, self.npoints)
+
+        plt.imshow(self.Phi_error,'r-',lw=2)
+
+        plt.show(block=False)
 
 ###################################################################
 class StochasticDiffusion_2d(StochasticDiffusion_2d_ABC):
-    def __init__(self,params,BC='Neumann'):
-        super().__init__(params,BC='Neumann')
+    def __init__(self,params,BC):
+        super().__init__(params,BC)
         '''
         This is the stochastic diffusion class for 2D simulation 
         inherited from StochasticDiffusion_2d
@@ -756,8 +814,8 @@ class StochasticDiffusion_2d(StochasticDiffusion_2d_ABC):
 
 ###################################################################
 class StochasticDiffusion_2d_normal(StochasticDiffusion_2d_ABC):
-    def __init__(self,params,BC='Neumann'):
-        super().__init__(params,BC='Neumann')
+    def __init__(self,params,BC):
+        super().__init__(params,BC)
         '''
         This is with normal wiener term and not dichtomic
         '''
@@ -778,8 +836,8 @@ class StochasticDiffusion_2d_normal(StochasticDiffusion_2d_ABC):
 
 ###################################################################
 class StochasticDiffusion_2d_noD(StochasticDiffusion_2d_ABC):
-    def __init__(self, params, BC='Neumann'):
-        super().__init__(params, BC='Neumann')
+    def __init__(self, params, BC):
+        super().__init__(params, BC)
         '''
         This is with normal wiener term and not dichtomic
         '''
@@ -888,7 +946,8 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
             self.Phi_fields_2d[:, f] = \
                 self.Phi_2d_vec + np.sqrt( 2*self.Dt) * np.dot(self.gradPhi[:, f, :], (self.dW[f, :]))
 
-            #print((np.sqrt(2 * self.Dt) *np.dot(self.gradPhi[:, f, :], (self.dW[f, :]))).max())
+
+        print('Max. Stochastic velocity ',(np.sqrt(2 * self.Dt) *np.dot(self.gradPhi[:, 1, :], (self.dW[1, :]))).max())
 
         self.getIEM()
         #self.Phi_fields_2d = self.Phi_fields_2d + self.IEM
@@ -947,8 +1006,8 @@ class StochasticDiffusion_2d_oldPhi(StochasticDiffusion_2d_ABC):
 
 ###################################################################
 class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
-    def __init__(self, params, BC='Neumann', d_0=1.0):
-        super().__init__(params, BC='Neumann')
+    def __init__(self, params, BC, d_0=1.0):
+        super().__init__(params, BC)
         '''
         This is with normal wiener term and not dichtomic
         '''
@@ -972,7 +1031,7 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
         # this is done in an explicit manner!
 
         # compute Wiener term
-        self.dWiener()
+        self.dWiener2()
 
         # compute the gradient of Phi_star for each field separately
         self.getGradients()
@@ -986,13 +1045,14 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
         # finally get the average over all fields -> new Phi, though it is never used for further computation
         self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
 
+        print('Max Wiener Term: ', max(np.sqrt(2*self.Dt) * np.dot(self.gradPhi[:, 1, :],self.dW[1, :])))
         # computes the langevine mixing
         self.getLangevine()
         self.getIEM()
 
         # at this stage self.Phi is already the averaged field, so use it for further computation
         for f in range(self.fields):
-            self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.IEM[:,f]#+ self.LANGEV[:, f]
+            self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.LANGEV[:, f]
 
         # finally get the average over all fields -> new Phi, though it is never used for further computation
         self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
@@ -1068,16 +1128,16 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
 
         # compute a
         self.get_a()
-        # print('a max', self.a.max())
+        #print('a max', self.a.max())
         # print('a min', self.a.min())
 
         # compute b
         self.get_b()
-        # print('b max', self.b.max())
-        # print('b min', self.b.min())
+        #print('b max', self.b.max())
+        #print('b min', self.b.min())
 
         # compute new Wiener increment for the Langevine formation
-        #self.dWiener()
+        self.dWiener()
         self.dWienerNormal()
 
         # compute Langevine for each field:
@@ -1087,6 +1147,12 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
 
         self.LANGEV[np.isnan(self.LANGEV)] = 0.0
         #print('Langev.max(): ', self.LANGEV.max())
+
+        print(' ')
+        print('Term one: ', max(- self.a * (self.dt /(2*T_eddy)) *(self.Phi_fields_2d[:,1] - self.Phi_2d_vec)))
+        print('Term two: ', max(np.sqrt(2 * self.b * (self.dt * 2/T_eddy) * self.Phi_fields_2d[:,1] * (1 - self.Phi_fields_2d[:,1]))))
+        #print('Difference: ', max(- self.a * (self.dt /(2*T_eddy)) *(self.Phi_fields_2d[:,1] - self.Phi_2d_vec)) - max(np.sqrt(2 * self.b * (self.dt * 2/T_eddy) * self.Phi_fields_2d[:,1] * (1 - self.Phi_fields_2d[:,1]))))
+        print('Max Langev: ', max(self.LANGEV[:,1]))
 
     # @jit(parallel=True)
     # def getIEM(self):
@@ -1101,8 +1167,8 @@ class StochasticDiffusion_2d_Langevine(StochasticDiffusion_2d_ABC):
 
 ###################################################################
 class StochasticDiffusion_2d_Langevine2(StochasticDiffusion_2d_ABC):
-    def __init__(self, params, BC='Neumann', d_0=1.0):
-        super().__init__(params, BC='Neumann')
+    def __init__(self, params, BC, d_0=1.0):
+        super().__init__(params, BC)
         # these are needed for the langevine model
         self.d_0 = d_0
         self.a = self.Phi_2d_vec.copy() * 1e-15
