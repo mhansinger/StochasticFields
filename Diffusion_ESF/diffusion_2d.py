@@ -787,6 +787,8 @@ class StochasticDiffusion_2d_ABC(Diffusion_2D_ABC):
 
         plt.plot(self.Phi_error[x_cond, :],'r-',lw=2)
         plt.legend(['Error'])
+        plt.ylabel('Scalar concentration [-]')
+        plt.xlabel('x')
         plt.show(block=False)
 
     def imshow_error(self, x=0.5, Diffusion=None):
