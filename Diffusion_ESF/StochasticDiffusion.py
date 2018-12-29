@@ -8,6 +8,7 @@ date: April 2018
 '''
 
 import numpy as np
+import scipy as sc
 import matplotlib.pyplot as plt
 from abc import ABC
 
@@ -24,7 +25,7 @@ class params():
     # laminar diffusion
     D = 0.001
     # turbulent diffusion
-    Dt = D * 3
+    Dt = D * 6
     # number of stochastic fields
     fields = 8
     # time steps to compute
@@ -54,6 +55,10 @@ class Diffusion(object):
         '''Initialize the gaussian distribution'''
         self.Phi_org = np.zeros((len(x),1))
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
+    def stepFunction(self,x):
+        self.Phi_org = np.zeros((len(x),1))
+        self.Phi_org[int(self.npoints/2):, 0] = 1
 
     def setDiffMatrix(self, D=params.D, Dt=params.Dt, dt=params.dt):
         '''
@@ -96,6 +101,7 @@ class Diffusion(object):
         # 1D diffusion equation
         try:
             self.Phi = np.matmul(self.A,self.Phi)
+            #self.Phi = sc.linalg.solve(self.A,self.Phi)
 
             if self.BC == 'Dirichlet':
                 # update the boundary values -> so that gradient is zero at boundary!
@@ -163,6 +169,9 @@ class StochasticDiffusion(object):
         self.Phi_org = np.zeros((len(x),1))
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
+    def stepFunction(self,x):
+        self.Phi_org = np.zeros((len(x),1))
+        self.Phi_org[int(self.npoints/2):, 0] = 1
 
     def setDiffMatrix(self):
         '''
@@ -173,7 +182,6 @@ class StochasticDiffusion(object):
         east = (self.D + self.Dt) * self.dt / self.dx ** 2
         middle = -2 * (self.D + self.Dt) * self.dt / self.dx ** 2 + 1
         west = (self.D + self.Dt) * self.dt / self.dx ** 2
-
 
         for i in range(1, self.npoints - 1):
             self.A[i][i - 1] = west
@@ -384,6 +392,9 @@ class StochasticDiffusion_oldPhi(object):
         self.Phi_org = np.zeros((len(x),1))
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
+    def stepFunction(self,x):
+        self.Phi_org = np.zeros((len(x),1))
+        self.Phi_org[int(self.npoints/2):, 0] = 1
 
     def setDiffMatrix(self):
         '''
@@ -602,6 +613,9 @@ class StochasticDiffusion_Stratonovich(object):
         self.Phi_org = np.zeros((len(x), 1))
         self.Phi_org[:, 0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
+    def stepFunction(self,x):
+        self.Phi_org = np.zeros((len(x),1))
+        self.Phi_org[int(self.npoints/2):, 0] = 1
 
     def setStochMatrix(self):
         # this is the diffusion matrix where the stochastic term is included!
@@ -802,6 +816,9 @@ class StochasticDiffusion_noIEM(object):
         self.Phi_org = np.zeros((len(x),1))
         self.Phi_org[:,0] = np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
 
+    def stepFunction(self,x):
+        self.Phi_org = np.zeros((len(x),1))
+        self.Phi_org[int(self.npoints/2):, 0] = 1
 
     def setDiffMatrix(self):
         '''
@@ -970,28 +987,33 @@ class StochasticDiffusion_noIEM(object):
             self.Phi_fields[:, f] = self.Phi_org[:,0].copy()
 
 
-
-
 ####################################################################
 
-#from params import params
+# from params import params
 
 myParams = params()
 
 Pe = (myParams.D+myParams.Dt)*myParams.dt / (myParams.dx**2)
-print("Pe is: ",round(Pe,4))
+print("Pe is: ", round(Pe,4))
 
-ESF_off = StochasticDiffusion(myParams)
-ESF_on = StochasticDiffusion(myParams)
-ESF_new = StochasticDiffusion_noIEM(myParams)
-Diff = Diffusion(myParams)
+thisBC = 'Dirichlet'
 
-tsteps = 1000
+ESF_off = StochasticDiffusion(myParams,BC=thisBC)
+ESF_off.stepFunction(ESF_off.grid)
+ESF_on = StochasticDiffusion(myParams,BC=thisBC)
+ESF_on.stepFunction(ESF_on.grid)
+ESF_new = StochasticDiffusion_noIEM(myParams,BC=thisBC)
+ESF_new.stepFunction(ESF_new.grid)
+Diff = Diffusion(myParams,BC=thisBC)
+Diff.stepFunction(Diff.grid)
+
+tsteps = 10000
 
 ESF_off.startStochasticDiffusion(tsteps=tsteps,IEM_on=False)
 ESF_on.startStochasticDiffusion(tsteps=tsteps, IEM_on=True)
 ESF_new.startStochasticDiffusion(tsteps=tsteps)
 Diff.advanceDiffusion(tsteps=tsteps)
+
 
 
 # plot to compare the results
@@ -1013,10 +1035,11 @@ plt.show(block=False)
 plt.figure(2)
 on, =plt.plot(ESF_on.Phi_fields[:,0],'-.r', label='IEM on')
 off, = plt.plot(ESF_off.Phi_fields[:,0],'--b', label='IEM off')
-init, = plt.plot(ESF_off.Phi_org,'-m', label='init. Distribution')
+#init, = plt.plot(ESF_off.Phi_org,'-m', label='init. Distribution')
 plt.plot(ESF_on.Phi_fields[:,1:],'-.r')
 plt.plot(ESF_off.Phi_fields[:,1:],'--b')
-plt.legend(handles=[on,off,init])
+#plt.legend(handles=[on,off,init])
+plt.legend(handles=[on,off])
 plt.title('Evolution of single fields after %s steps' % str(tsteps))
 plt.ylabel('Scalar concentration [-]')
 try:
