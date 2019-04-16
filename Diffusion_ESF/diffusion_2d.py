@@ -4,7 +4,7 @@ pure 1D-diffusive process of an inert scalar by using the stochastic differentia
 
 @author: M. Hansinger
 
-date: April 2018
+date: April 2019
 '''
 
 import numpy as np
@@ -1183,100 +1183,245 @@ class StochasticDiffusion_2d_Langevine2(StochasticDiffusion_2d_ABC):
         self.dWn = self.dW.copy()
 
 
-##########################################
-# to run the Simulation
 
-# myParams = params()
-#
-# myParams.fields = 8
-#
-# #myParams.Dt = 1e-15
-#
-# time_steps=2000
-#
-# Diff = Diffusion_2d(myParams)
-# Diff.advanceDiffusion(time_steps)
-#
-# print('Now computing Stochastic Diffusion with Langevine model')
-# Langev = StochasticDiffusion_2d_Langevine(myParams,d_0=1)
-# Langev.startStochasticDiffusion(time_steps)
-# Langev.plot_conditional_fields(Diffusion=Diff,legend=True)
-#
-#
-# # Diff.plot_3D()
-# # Diff.imshow_Phi()
-# # Diff.plot_3D(org=True)
-# # Diff.imshow_Phi(org=True)
-#
-# # # IEM Off
-# # Stoch2 = StochasticDiffusion_2d(myParams)
-# # Stoch2.startStochasticDiffusion(time_steps,IEM_on=False)
-# # Stoch2.plot_3D()
-# # Stoch2.plot_3D_STD()
-# # Stoch2.plot_conditional_fields(Diffusion=Diff,legend=True)
-# #
-# # IEM On
-# Stoch_on = StochasticDiffusion_2d(myParams)
-# Stoch_on.startStochasticDiffusion(time_steps,IEM_on=True)
-# # Stoch_on.plot_3D()
-# # Stoch_on.plot_3D_STD()
-# Stoch_on.plot_conditional_fields(Diffusion=Diff,legend=True)
-# # plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
-# # plt.savefig('Figures/Phi_IEM_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_on.tsteps), str(Stoch_on.tsteps), str(Stoch_on.Dt), str(Stoch_on.fields)))
-# plt.show()
+###################################################################
+class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
+    def __init__(self, params, BC, d_0=1.0):
+        super().__init__(params, BC)
+        '''
+        This is with Popes (Phys. Rev. 2013) Shadow Positioning Mixing Model (SPMM)
+        See Eq. 56 for simplification
+        '''
 
-#
-# # # IEM On
-# Stoch_noD = StochasticDiffusion_2d_noD(myParams)
-# Stoch_noD.startStochasticDiffusion(time_steps,IEM_on=True)
-# # Stoch_on.plot_3D()
-# # Stoch_on.plot_3D_STD()
-# Stoch_noD.plot_conditional_fields(Diffusion=Diff)
-# plt.savefig('Figures/Phi_noD_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_noD.tsteps), str(Stoch_noD.tsteps), str(Stoch_noD.Dt), str(Stoch_noD.fields)))
-# plt.savefig('Figures/Phi_noD_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_noD.tsteps), str(Stoch_noD.tsteps), str(Stoch_noD.Dt), str(Stoch_noD.fields)))
-# plt.show()
-#
-# Normal distribution
-# Stoch_norm = StochasticDiffusion_2d_normal(myParams)
-# Stoch_norm.startStochasticDiffusion(time_steps,IEM_on=True)
-# # Stoch_on.plot_3D()
-# # Stoch_on.plot_3D_STD()
-# Stoch_norm.plot_conditional_fields(Diffusion=Diff)
-# plt.savefig('Figures/Phi_norm_%s_steps%s_Dt%s_%sfields.png' % (str(Stoch_norm.tsteps), str(Stoch_norm.tsteps), str(Stoch_norm.Dt), str(Stoch_norm.fields)))
-# plt.savefig('Figures/Phi_norm_%s_steps%s_Dt%s_%sfields.eps' % (str(Stoch_norm.tsteps), str(Stoch_norm.tsteps), str(Stoch_norm.Dt), str(Stoch_norm.fields)))
+        # these are needed for the langevine model
+        self.d_0 = d_0
+        self.SPMM = self.IEM.copy()
 
-# plt.show()
-# #
-# Diff.Dt = 1e-15
-# Diff.advanceDiffusion(400)
-#
-# Stoch_on.Dt = 1e-15
-# Stoch_on.continueStochasticDiffusion(200)
-# Stoch_on.plot_conditional_fields(Diffusion=Diff)
-# plt.show()
-#
-# Stoch_noD.Dt = 1e-15
-# Stoch_noD.continueStochasticDiffusion(200)
-# Stoch_noD.plot_conditional_fields(Diffusion=Diff)
-# plt.show()
 
-# Stoch_oldPhi = StochasticDiffusion_2d_oldPhi(myParams)
-# Stoch_oldPhi.startStochasticDiffusion(200)
-# Stoch_oldPhi.plot_conditional_fields(Diffusion=Diff)
-# plt.show()
+        print('Computing Stochastic Fields with Binomial Langevine Model!\n')
 
-# import copy
-#
-# Diff_org = copy.copy(Diff)
-# Stoch_org = copy.copy(Stoch_on)
-#
-# #Diff = Diffusion_2d(myParams)
-# Diff.Dt = 1e-15
-# Diff.continueDiffusion(200)
-#
-# Stoch_on.Dt = 1e-15
-# Stoch_on.continueStochasticDiffusion(200)
-#
-# Stoch_on.plot_conditional_fields(Diffusion=Diff,legend=True)
-#
-# plt.show()
+    @jit(parallel=True)
+    def addStochastic(self):
+        # the Wiener element is between 1,..,nFields of Wiener term
+        # this is done in an explicit manner!
+
+        # compute Wiener term
+        self.dWiener2()
+
+        # compute the gradient of Phi_star for each field separately
+        self.getGradients()
+
+        # now compute Phi for each field and loop over points
+        for f in range(self.fields):
+            for p in range(self.npoints**2):
+                self.Phi_fields_2d[p, f] = \
+                    self.Phi_fields_2d_star[p, f] + np.sqrt(2*self.Dt) * np.dot(self.gradPhi[p, f, :],self.dW[f, :])
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+        print('Max Wiener Term: ', max(np.sqrt(2*self.Dt) * np.dot(self.gradPhi[:, 1, :],self.dW[1, :])))
+        # computes the langevine mixing
+
+        self.getSPMM()
+
+        # at this stage self.Phi is already the averaged field, so use it for further computation
+        for f in range(self.fields):
+            self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.SPMM[:, f]
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+        # get the RMS of the fields
+        self.Phi_STD = self.Phi_fields_2d.std(axis=1)
+
+    def startStochasticDiffusion(self, tsteps = params.tsteps, SPMM_on = True):
+        '''
+            Start from 0 to advance the stochastic diffusion process
+        '''
+        self.tsteps = tsteps
+
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
+        # choose for IEM
+        self.SPMM_on = SPMM_on
+
+        #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
+        self.setDiffMatrix()
+
+        for i in range(0, self.tsteps):
+
+            if i%100 == 0:
+                print(i)
+
+            if i == 0:
+
+                # this is the first time step, assuming all fields are the same,
+                # so fill them:
+                self.initFields()
+
+                # updateing diffusion equation
+                # 1. part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+            else:
+                # 1 part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+
+    @jit(parallel=True)
+    def getSPMM(self):
+        # compute at first the Eddy turn over time: Teddy
+        # 1/T_eddy = omega (mixing frequency)
+        T_eddy = (self.dx ** 2 + self.dy ** 2) / (2 * (self.Dt))
+
+        # compute SPMM for each field:
+        for f in range(self.fields):
+            if f==0:
+                self.SPMM[:, f] = - (self.Phi_fields_2d[:, f] - 0.5 * (
+                            self.Phi_fields_2d[:, f + 1] - self.Phi_fields_2d[:, self.fields - 1])) * (self.dt / (2 * T_eddy))
+            elif f==self.fields-1:
+                self.SPMM[:, f] = - (self.Phi_fields_2d[:, f] - 0.5 * (
+                            self.Phi_fields_2d[:, 0] - self.Phi_fields_2d[:, f - 1])) * (self.dt / (2 * T_eddy))
+            else:
+                self.SPMM[:,f] = - (self.Phi_fields_2d[:,f] - 0.5*(self.Phi_fields_2d[:,f+1] - self.Phi_fields_2d[:,f-1])) * (self.dt / (2*T_eddy))
+
+        self.SPMM[np.isnan(self.SPMM)] = 0.0
+        #print('Langev.max(): ', self.LANGEV.max())
+
+
+###################################################################
+class StochasticDiffusion_2d_SPMM_full(StochasticDiffusion_2d_ABC):
+    def __init__(self, params, BC, d_0=1.0):
+        super().__init__(params, BC)
+        '''
+        This is with Popes (Phys. Rev. 2013) Shadow Positioning Mixing Model (SPMM)
+        No simplification applied!
+        '''
+
+        # these are needed for the langevine model
+        self.d_0 = d_0
+        self.SPMM = self.IEM.copy()
+
+        # shadow position fields
+        self.R1_field=self.Phi_fields_2d.copy()
+        self.R2_field = self.Phi_fields_2d.copy()
+        self.R_displacement = self.Phi_fields_2d.copy()
+        self.a = 1.33
+        self.b = 0
+        self.c = 3.34
+        self.Phi_conditioned_mean = self.Phi_2d_vec.copy()
+
+        print('Computing Stochastic Fields with Binomial Langevine Model!\n')
+
+    @jit(parallel=True)
+    def addStochastic(self):
+        # the Wiener element is between 1,..,nFields of Wiener term
+        # this is done in an explicit manner!
+
+        # compute Wiener term; dichotomic
+        self.dWiener()
+
+        # compute the gradient of Phi_star for each field separately
+        self.getGradients()
+
+        # now compute Phi for each field and loop over points
+        for f in range(self.fields):
+            for p in range(self.npoints**2):
+                self.Phi_fields_2d[p, f] = \
+                    self.Phi_fields_2d_star[p, f] + np.sqrt(2*self.Dt) * np.dot(self.gradPhi[p, f, :],self.dW[f, :])
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+        print('Max Wiener Term: ', max(np.sqrt(2*self.Dt) * np.dot(self.gradPhi[:, 1, :],self.dW[1, :])))
+        # computes the langevine mixing
+
+        # advance the shadow positions
+        self.advanceShadows()
+        self.getSPMM()
+
+        # at this stage self.Phi is already the averaged field, so use it for further computation
+        for f in range(self.fields):
+            self.Phi_fields_2d[:, f] = self.Phi_fields_2d[:, f] + self.SPMM[:, f]
+
+        # finally get the average over all fields -> new Phi, though it is never used for further computation
+        self.Phi_2d_vec = self.Phi_fields_2d.mean(axis=1)
+
+        # get the RMS of the fields
+        self.Phi_STD = self.Phi_fields_2d.std(axis=1)
+
+    def startStochasticDiffusion(self, tsteps = params.tsteps, SPMM_on = True):
+        '''
+            Start from 0 to advance the stochastic diffusion process
+        '''
+        self.tsteps = tsteps
+
+        self.Phi_2d_vec = self.Phi_2d_org.reshape(self.npoints * self.npoints)
+
+        # choose for IEM
+        self.SPMM_on = SPMM_on
+
+        #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
+        self.setDiffMatrix()
+
+        for i in range(0, self.tsteps):
+
+            if i%100 == 0:
+                print(i)
+
+            if i == 0:
+
+                # this is the first time step, assuming all fields are the same,
+                # so fill them:
+                self.initFields()
+
+                # updateing diffusion equation
+                # 1. part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+            else:
+                # 1 part of fractional step
+                self.pureDiffusion()
+
+                # 2. part of fractional step, add the stochastic velocity
+                self.addStochastic()
+
+    @jit(parallel=True)
+    def advanceShadows(self):
+        # 1/T_eddy = omega (mixing frequency)
+        self.T_eddy = (self.dx ** 2 + self.dy ** 2) / (2 * (self.Dt))
+
+        # loop over fields and points
+        for f in range(self.fields):
+            self.R1_field[:, f] = self.R1_field[:, f] - self.R1_field[:,f]*self.a/self.T_eddy * self.dt + \
+                                  np.sqrt(2*self.Dt)*(- self.dW[0,f])*self.dt
+            self.R2_field[:, f] = self.R2_field[:, f] - self.R2_field[:, f] * self.a / self.T_eddy * self.dt + \
+                                  np.sqrt(2 * self.Dt) * (- self.dW[1, f]) * self.dt
+            self.R_displacement[:,f] = np.sqrt(self.R1_field[:, f]**2 + self.R2_field[:, f]**2)
+
+    @jit(parallel=True)
+    def getSPMM(self):
+        # Pope Eq. 25
+
+        # compute SPMM for each field:
+        for f in range(self.fields):
+            # copmute conditioned mean of Phi
+            # see Pope Eq. 25
+            self.Phi_conditioned_mean[:,f] = self.R_displacement[:,f] * \
+                                             np.mean(np.multiply(self.R_displacement*self.Phi_fields_2d),axis=1)\
+                                             /np.mean(self.R_displacement**2,axis=1)
+
+            self.SPMM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_conditioned_mean[:,f]) * (self.dt *self.c/ (self.T_eddy))
+
+        self.SPMM[np.isnan(self.SPMM)] = 0.0
+        #print('Langev.max(): ', self.LANGEV.max())
