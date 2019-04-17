@@ -4,7 +4,7 @@ pure 1D-diffusive process of an inert scalar by using the stochastic differentia
 
 @author: M. Hansinger
 
-date: April 2018
+date: April 2019
 '''
 
 import numpy as np

@@ -1198,7 +1198,7 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
         self.SPMM = self.IEM.copy()
 
 
-        print('Computing Stochastic Fields with Binomial Langevine Model!\n')
+        print('Computing Stochastic Fields with SPMM!\n')
 
     @jit(parallel=True)
     def addStochastic(self):
@@ -1235,6 +1235,7 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
         # get the RMS of the fields
         self.Phi_STD = self.Phi_fields_2d.std(axis=1)
 
+    @jit(parallel=True)
     def startStochasticDiffusion(self, tsteps = params.tsteps, SPMM_on = True):
         '''
             Start from 0 to advance the stochastic diffusion process
@@ -1293,7 +1294,7 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
                 self.SPMM[:,f] = - (self.Phi_fields_2d[:,f] - 0.5*(self.Phi_fields_2d[:,f+1] - self.Phi_fields_2d[:,f-1])) * (self.dt / (2*T_eddy))
 
         self.SPMM[np.isnan(self.SPMM)] = 0.0
-        #print('Langev.max(): ', self.LANGEV.max())
+        print('max SPMM term: ', self.SPMM.max())
 
 
 ###################################################################
