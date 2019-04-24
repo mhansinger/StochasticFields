@@ -16,7 +16,7 @@ myParams.computeGrid()
 
 #myParams.Dt = 1e-15
 
-time_steps=20
+time_steps=300
 myParams.tsteps = time_steps
 
 nBlocks = 5
@@ -39,21 +39,22 @@ IEM.startStochasticDiffusion(time_steps,IEM_on=True)
 
 IEM.plot_conditional_fields(Diffusion=Diff2,legend=True)
 #IEM.plot_conditional_error(Diffusion=Diff2)
+plt.show(block=False)
 
 print(' ')
 print('Now computing Stochastic Diffusion with SPMM model')
 
-# SPMM = StochasticDiffusion_2d_SPMM_simple(myParams,BC=BC,d_0=1)
-# #SPMM.manyBlockFunction(Diff2.grid,nBlocks=nBlocks)
-# SPMM.startStochasticDiffusion(time_steps,SPMM_on=True)
-# SPMM.plot_conditional_fields(Diffusion=Diff2, legend=True)
-# #SPMM.plot_conditional_error(Diffusion=Diff2)
-# #SPMM.imshow_error(Diffusion=Diff2)
-
-SPMM2 = StochasticDiffusion_2d_SPMM_full(myParams,BC=BC)
+SPMM = StochasticDiffusion_2d_SPMM_simple(myParams,BC=BC,d_0=1)
 #SPMM.manyBlockFunction(Diff2.grid,nBlocks=nBlocks)
-SPMM2.startStochasticDiffusion(time_steps,SPMM_on=True)
-SPMM2.plot_conditional_fields(Diffusion=Diff2, legend=True)
+SPMM.startStochasticDiffusion(time_steps,SPMM_on=True)
+SPMM.plot_conditional_fields(Diffusion=Diff2, legend=True)
+#SPMM.plot_conditional_error(Diffusion=Diff2)
+#SPMM.imshow_error(Diffusion=Diff2)
+
+# SPMM2 = StochasticDiffusion_2d_SPMM_full(myParams,BC=BC)
+# #SPMM.manyBlockFunction(Diff2.grid,nBlocks=nBlocks)
+# SPMM2.startStochasticDiffusion(time_steps,SPMM_on=True)
+# SPMM2.plot_conditional_fields(Diffusion=Diff2, legend=True)
 
 plt.show(block=False)
 
