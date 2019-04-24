@@ -1317,9 +1317,9 @@ class StochasticDiffusion_2d_SPMM_full(StochasticDiffusion_2d_ABC):
         self.a = 1.33
         self.b = 0
         self.c = 3.34
-        self.Phi_conditioned_mean = self.Phi_2d_vec.copy()
+        self.Phi_conditioned_mean = self.R2_field.copy()
 
-        print('Computing Stochastic Fields with Binomial Langevine Model!\n')
+        print('Computing Stochastic Fields full SPMM!\n')
 
     @jit(parallel=True)
     def addStochastic(self):
@@ -1346,7 +1346,9 @@ class StochasticDiffusion_2d_SPMM_full(StochasticDiffusion_2d_ABC):
 
         # advance the shadow positions
         self.advanceShadows()
+        print('Shadows ok')
         self.getSPMM()
+        print('SPMM ok')
 
         # at this stage self.Phi is already the averaged field, so use it for further computation
         for f in range(self.fields):
@@ -1401,28 +1403,39 @@ class StochasticDiffusion_2d_SPMM_full(StochasticDiffusion_2d_ABC):
     def advanceShadows(self):
         # 1/T_eddy = omega (mixing frequency)
         self.T_eddy = (self.dx ** 2 + self.dy ** 2) / (2 * (self.Dt))
+        #print('t Eddy ok')
 
         # loop over fields and points
         for f in range(self.fields):
             self.R1_field[:, f] = self.R1_field[:, f] - self.R1_field[:,f]*self.a/self.T_eddy * self.dt + \
-                                  np.sqrt(2*self.Dt)*(- self.dW[0,f])*self.dt
+                                  np.sqrt(2*self.Dt)*(- self.dW[f,0])*self.dt
             self.R2_field[:, f] = self.R2_field[:, f] - self.R2_field[:, f] * self.a / self.T_eddy * self.dt + \
-                                  np.sqrt(2 * self.Dt) * (- self.dW[1, f]) * self.dt
-            self.R_displacement[:,f] = np.sqrt(self.R1_field[:, f]**2 + self.R2_field[:, f]**2)
+                                  np.sqrt(2 * self.Dt) * (- self.dW[f,1]) * self.dt
+
+            #print('R1 R2 ok')
+            self.R_displacement[:,f] = np.sqrt(self.R1_field[:, f]*self.R1_field[:, f] + self.R2_field[:, f]*self.R2_field[:, f])
+            #print('Displacement ok')
 
     @jit(parallel=True)
     def getSPMM(self):
         # Pope Eq. 25
 
+        mean_zaehler = 0
+
+        # compute mean
+        for f in range(self.fields):
+            mean_zaehler+=self.R_displacement[:, f] * self.Phi_fields_2d[:,f]
+
+        mean_zaehler=mean_zaehler/self.fields
+
         # compute SPMM for each field:
         for f in range(self.fields):
             # copmute conditioned mean of Phi
             # see Pope Eq. 25
-            self.Phi_conditioned_mean[:,f] = self.R_displacement[:,f] * \
-                                             np.mean(np.multiply(self.R_displacement*self.Phi_fields_2d),axis=1)\
-                                             /np.mean(self.R_displacement**2,axis=1)
+            self.Phi_conditioned_mean[:,f] = self.R_displacement[:,f] * mean_zaehler / np.mean(self.R_displacement[:,f]**2)
 
-            self.SPMM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_conditioned_mean[:,f]) * (self.dt *self.c/ (self.T_eddy))
+            self.SPMM[:,f] = - (self.Phi_fields_2d[:,f] - self.Phi_conditioned_mean[:,f]) * (self.dt *self.c /(self.T_eddy))
+
+            print('Max SPMM term: ',self.SPMM[:,f].max())
 
         self.SPMM[np.isnan(self.SPMM)] = 0.0
-        #print('Langev.max(): ', self.LANGEV.max())
