@@ -1246,6 +1246,8 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
 
         # choose for IEM
         self.SPMM_on = SPMM_on
+        if self.SPMM_on is False:
+            print('SPMM is switched off!\nNo Mixing Model is used!\n')
 
         #first update the diffusion matrix (implicit), in case dt, D, Dt have changed
         self.setDiffMatrix()
@@ -1282,20 +1284,39 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
         # 1/T_eddy = omega (mixing frequency)
         T_eddy = (self.dx ** 2 + self.dy ** 2) / (2 * (self.Dt))
 
-        for node in range(self.npoints):
-            fields_in_node = self.Phi_fields_2d[node,:]
-            fields_order = np.argsort(self.Phi_fields_2d[node,:])
+        # compute SPMM term only if
+        if self.SPMM_on:
+            for node in range(len(self.Phi_fields_2d)):
+                fields_in_node = self.Phi_fields_2d[node, :]
+                #print(max(fields_in_node))
+                fields_order = np.argsort(self.Phi_fields_2d[node, :])
 
-            for pos, f in enumerate(fields_order):
-                if pos==0:
-                    self.SPMM[node, f] = - (self.Phi_fields_2d[node, f] - (fields_in_node[pos] - fields_in_node[pos+1])) * (self.dt / (3.3 * T_eddy))
-                elif pos==self.fields-1:
-                    self.SPMM[node, f] = - (self.Phi_fields_2d[node, f] - (fields_in_node[pos-1] - fields_in_node[pos])) * (self.dt / (3.3 * T_eddy))
-                else:
-                    self.SPMM[node, f] = - (self.Phi_fields_2d[node, f] - 0.5 * (fields_in_node[pos-1] - fields_in_node[pos + 1])) * (self.dt / (3.3 * T_eddy))
+                # mix neighbours
+                #fields_order=np.sort(fields_order)[::-1]
+                #fields_order = np.random.shuffle(fields_order)
 
+                for pos, f in enumerate(fields_order):
+                    if pos == 0:
+                        self.SPMM[node, f] = - (
+                                    self.Phi_fields_2d[node, f] - 0.5*(fields_in_node[pos] + fields_in_node[pos + 1])) * (
+                                                         self.dt / (3.3 * T_eddy))
+                    elif pos == self.fields - 1:
+                        self.SPMM[node, f] = - (
+                                    self.Phi_fields_2d[node, f] - 0.5*(fields_in_node[pos - 1] + fields_in_node[pos])) * (
+                                                         self.dt / (3.3 * T_eddy))
+                    else:
+                        self.SPMM[node, f] = - (self.Phi_fields_2d[node, f] - 0.5 * (
+                                    fields_in_node[pos - 1] + fields_in_node[pos + 1])) * (self.dt / (3.3 * T_eddy))
 
-        # # compute SPMM for each field with mixing in local composition space:
+            self.SPMM[np.isnan(self.SPMM)] = 0.0
+        else:
+            self.SPMM[:,:] = 0
+
+        # for f in range(self.fields):
+        #     # mimmic IEM
+        #     self.SPMM[:, f] = - (self.Phi_fields_2d[:, f] - self.Phi_2d_vec) * (self.dt / (2 * T_eddy))
+
+        # # compute SPMM for each field:
         # for f in range(self.fields):
         #     if f==0:
         #         self.SPMM[:, f] = - (self.Phi_fields_2d[:, f] - 0.5 * (
@@ -1306,7 +1327,6 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
         #     else:
         #         self.SPMM[:,f] = - (self.Phi_fields_2d[:,f] - 0.5*(self.Phi_fields_2d[:,f+1] - self.Phi_fields_2d[:,f-1])) * (self.dt / (2*T_eddy))
 
-        self.SPMM[np.isnan(self.SPMM)] = 0.0
         print('max SPMM term: ', self.SPMM.max())
 
 
