@@ -16,7 +16,7 @@ myParams.computeGrid()
 
 #myParams.Dt = 1e-15
 
-time_steps=100
+time_steps=500
 myParams.tsteps = time_steps
 
 nBlocks = 5

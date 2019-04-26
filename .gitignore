@@ -3,3 +3,7 @@
 *.eps
 *.png
 *.csv
+*.txt
+*.pdf
+
+__pycache__

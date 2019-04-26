@@ -1292,7 +1292,7 @@ class StochasticDiffusion_2d_SPMM_simple(StochasticDiffusion_2d_ABC):
                 fields_order = np.argsort(self.Phi_fields_2d[node, :])
 
                 # mix neighbours
-                #fields_order=np.sort(fields_order)[::-1]
+                fields_order=np.sort(fields_order)
                 #fields_order = np.random.shuffle(fields_order)
 
                 for pos, f in enumerate(fields_order):
