@@ -183,7 +183,7 @@ D = 0.000001
 Dt = D*2
 
 # time step
-dt = 0.0001
+dt = 0.00001
 tsteps = 100
 fields = 8
 Phi_0 = gaussianDist(grid, grid[int(npoints/2)], 0.05)

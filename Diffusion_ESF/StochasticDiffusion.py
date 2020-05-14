@@ -323,17 +323,18 @@ class StochasticDiffusion(object):
 
     def getGradients(self):
         # it computes the scalar gradient dPhi/dx
-
+        # 4th ORDER
         for f in range(self.fields):
             # now compute the gradients with CDS, except the boundaries, they are up and downwind
             for i in range(self.npoints):
                 # iter over 0,...,npoints - 1
-                if i == 0:
-                    self.gradPhi[0,f] = (self.Phi_star[1,f] - self.Phi_star[0,f]) / self.dx
-                elif i == self.npoints - 1:
+                if i == 0 or i==1:
+                    self.gradPhi[i,f] = (self.Phi_star[i+1,f] - self.Phi_star[i,f]) / self.dx
+                elif i == self.npoints - 1 or i == self.npoints - 2:
                     self.gradPhi[i,f] = (self.Phi_star[i,f] - self.Phi_star[i-1,f]) / self.dx
                 else:
-                    self.gradPhi[i,f] = (self.Phi_star[i+1,f] - self.Phi_star[i-1,f]) / (2 * self.dx)
+                    self.gradPhi[i,f] = \
+                        (self.Phi_star[i+2,f] + 8*self.Phi_star[i+1,f] - 8*self.Phi_star[i-1,f] -self.Phi_star[i-2,f] ) / (12 * self.dx)
 
 
     def upDateDiffusion(self,D,Dt,dt):
@@ -348,7 +349,7 @@ class StochasticDiffusion(object):
 
     def getIEM(self):
         # compute at first the Eddy turn over time: Teddy
-        T_eddy = self.dx**2 /(2*self.Dt)
+        T_eddy = self.dx /(2*self.Dt)
 
         # compute IEM for each field:
         for f in range(self.fields):
@@ -567,7 +568,7 @@ class StochasticDiffusion_oldPhi(object):
 
     def getIEM(self):
         # compute at first the Eddy turn over time: Teddy
-        T_eddy = self.dx**2 /(2*self.Dt)
+        T_eddy = self.dx /(2*self.Dt)
 
         # compute IEM for each field:
         for f in range(self.fields):
@@ -773,7 +774,7 @@ class StochasticDiffusion_Stratonovich(object):
 
     def getIEM(self):
         # compute at first the Eddy turn over time: Teddy
-        T_eddy = self.dx ** 2 / (2 * self.Dt)
+        T_eddy = self.dx  / (2 * self.Dt)
 
         # compute IEM for each field:
         for f in range(self.fields):
@@ -990,26 +991,32 @@ class StochasticDiffusion_noIEM(object):
 ####################################################################
 
 # from params import params
+#%%
 
 myParams = params()
+
+# myParams.D = 0.0001
+# myParams.Dt = myParams.D*4
+# myParams.dt = 0.0002
+# myParams.fields = 32
 
 Pe = (myParams.D+myParams.Dt)*myParams.dt / (myParams.dx**2)
 print("Pe is: ", round(Pe,4))
 
-thisBC = 'Dirichlet'
+thisBC = 'Neumann'
 
 ESF_off = StochasticDiffusion(myParams,BC=thisBC)
-ESF_off.stepFunction(ESF_off.grid)
+# ESF_off.stepFunction(ESF_off.grid)
 ESF_on = StochasticDiffusion(myParams,BC=thisBC)
-ESF_on.stepFunction(ESF_on.grid)
+# ESF_on.stepFunction(ESF_on.grid)
 ESF_new = StochasticDiffusion_noIEM(myParams,BC=thisBC)
-ESF_new.stepFunction(ESF_new.grid)
+# ESF_new.stepFunction(ESF_new.grid)
 Diff = Diffusion(myParams,BC=thisBC)
-Diff.stepFunction(Diff.grid)
+# Diff.stepFunction(Diff.grid)
 
-tsteps = 10000
+tsteps = 1000
 
-ESF_off.startStochasticDiffusion(tsteps=tsteps,IEM_on=False)
+# ESF_off.startStochasticDiffusion(tsteps=tsteps,IEM_on=False)
 ESF_on.startStochasticDiffusion(tsteps=tsteps, IEM_on=True)
 ESF_new.startStochasticDiffusion(tsteps=tsteps)
 Diff.advanceDiffusion(tsteps=tsteps)
@@ -1018,35 +1025,36 @@ Diff.advanceDiffusion(tsteps=tsteps)
 
 # plot to compare the results
 plt.figure(1)
-plt.plot(Diff.Phi_org,':m')
+# plt.plot(Diff.Phi_org,':m')
 plt.plot(Diff.Phi,'-k')
-plt.plot(ESF_off.Phi,'--b')
+# plt.plot(ESF_off.Phi,'--b')
 plt.plot(ESF_on.Phi,'-.r')
-plt.legend(['init. Distribution','pure Diffusion','ESF Diffusion w/o IEM','ESF Diffusion w. IEM'])
+plt.plot(ESF_new.Phi,'-.b')
+#plt.legend(['init. Distribution','pure Diffusion','ESF Diffusion w/o IEM','ESF Diffusion w. IEM'])
 plt.title('Scalar distribution after %s steps' % str(tsteps))
 plt.ylabel('Scalar concentration [-]')
-try:
-    plt.savefig('Figures/Phi_%s_dt%s_D%s_%sfields.png' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
-    plt.savefig('Figures/Phi_%s_dt%s_D%s_%sfields.eps' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
-except:
-    pass
+# try:
+#     plt.savefig('Figures/Phi_%s_dt%s_D%s_%sfields.png' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
+#     plt.savefig('Figures/Phi_%s_dt%s_D%s_%sfields.eps' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
+# except:
+#     pass
 plt.show(block=False)
 
 plt.figure(2)
 on, =plt.plot(ESF_on.Phi_fields[:,0],'-.r', label='IEM on')
-off, = plt.plot(ESF_off.Phi_fields[:,0],'--b', label='IEM off')
+# off, = plt.plot(ESF_off.Phi_fields[:,0],'--b', label='IEM off')
 #init, = plt.plot(ESF_off.Phi_org,'-m', label='init. Distribution')
 plt.plot(ESF_on.Phi_fields[:,1:],'-.r')
-plt.plot(ESF_off.Phi_fields[:,1:],'--b')
+plt.plot(ESF_new.Phi_fields[:,1:],'--b')
 #plt.legend(handles=[on,off,init])
-plt.legend(handles=[on,off])
+# plt.legend(handles=[on,off])
 plt.title('Evolution of single fields after %s steps' % str(tsteps))
 plt.ylabel('Scalar concentration [-]')
-try:
-    plt.savefig('Figures/Fields_%s_dt%s_D%s%sfields.png' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
-    plt.savefig('Figures/Fields_%s_dt%s_D%s%sfields.eps' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
-except:
-    pass
+# try:
+#     plt.savefig('Figures/Fields_%s_dt%s_D%s%sfields.png' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
+#     plt.savefig('Figures/Fields_%s_dt%s_D%s%sfields.eps' % (str(tsteps), str(Diff.dt), str(ESF_on.D), str(ESF_on.fields)))
+# except:
+#     pass
 
 plt.show(block=False)
 

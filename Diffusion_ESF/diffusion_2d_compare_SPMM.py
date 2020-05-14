@@ -7,10 +7,11 @@ from multiprocessing import Process
 import matplotlib.pyplot as plt
 plt.close('all')
 
+######################################
 myParams = params
 myParams.dt = 0.05
 
-myParams.fields = 8
+myParams.fields =16
 myParams.npoints = 100
 myParams.computeGrid()
 
@@ -22,6 +23,9 @@ myParams.tsteps = time_steps
 nBlocks = 5
 
 BC = 'Dirichlet'
+######################################
+
+
 
 Diff2 = Diffusion_2d(myParams,BC=BC)
 
@@ -58,12 +62,19 @@ plt.show(block=False)
 #SPMM.plot_conditional_error(Diffusion=Diff2)
 #SPMM.imshow_error(Diffusion=Diff2)
 
-# SPMM2 = StochasticDiffusion_2d_SPMM_full(myParams,BC=BC)
+SPMM2 = StochasticDiffusion_2d_SPMM_nearest(myParams,BC=BC)
 # #SPMM.manyBlockFunction(Diff2.grid,nBlocks=nBlocks)
-# SPMM2.startStochasticDiffusion(time_steps,SPMM_on=True)
-# SPMM2.plot_conditional_fields(Diffusion=Diff2, legend=True)
+SPMM2.startStochasticDiffusion(time_steps,SPMM_on=True)
+SPMM2.plot_conditional_fields(Diffusion=Diff2, legend=True)
 
 plt.show(block=False)
+
+# SPMM3 = StochasticDiffusion_2d_SPMM_mix(myParams,BC=BC)
+# # #SPMM.manyBlockFunction(Diff2.grid,nBlocks=nBlocks)
+# SPMM3.startStochasticDiffusion(time_steps,SPMM_on=True)
+# SPMM3.plot_conditional_fields(Diffusion=Diff2, legend=True)
+#
+# plt.show(block=False)
 
 #plt.show(block=False)
 #

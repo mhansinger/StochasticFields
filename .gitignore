@@ -5,5 +5,7 @@
 *.csv
 *.txt
 *.pdf
+plots
+*.tex
 
 __pycache__
